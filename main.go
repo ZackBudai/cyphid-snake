@@ -50,9 +50,9 @@ func info() BattlesnakeInfoResponse {
 	return BattlesnakeInfoResponse{
 		APIVersion: "1",
 		Author:     "crazycat911", // TODO: Your Battlesnake username
-		Color:      "#0384fc",     // TODO: Choose color
-		Head:       "default",     // TODO: Choose head
-		Tail:       "default",     // TODO: Choose tail
+		Color:      "#ffffff",     // TODO: Choose color
+		Head:       "snow-worm",     // TODO: Choose head
+		Tail:       "block-bum",     // TODO: Choose tail
 	}
 }
 
@@ -150,27 +150,29 @@ func move(state GameState) BattlesnakeMoveResponse {
 	nextMove := safeMoves[rand.Intn(len(safeMoves))]
 
 	// TODO: Step 4 - Move towards food instead of random, to regain health and survive longer
-	// food := state.Board.Food
+	food := state.Board.Food
 
-	// closestFood := FindClosestFood(myHead, food)
+	closestFood := FindClosestFood(myHead, food)
 
-	// dx := closestFood.X - myHead.X
-	// dy := closestFood.Y - myHead.Y
+	dx := closestFood.X - myHead.X
+	dy := closestFood.Y - myHead.Y
 
-	// if dx > 0 {
-	// 	goodmove := "right"
-	// } else if dx < 0 {
-	// 	goodmove := "left"
-	// } else if dy > 0 {
-	// 	goodmove := "up"
-	// } else if dy < 0 {
-	// 	goodmove := "down"
-	// }
+	var goodmove string
 
-	// if isMoveSafe[goodmove] {
-	// 	log.Printf("MOVE %d: %s\n", state.Turn, goodmove)
-	// 	return BattlesnakeMoveResponse{Move: goodmove}
-	// }
+	if dx > 0 {
+		goodmove = "right"
+	} else if dx < 0 {
+		goodmove = "left"
+	} else if dy > 0 {
+		goodmove = "up"
+	} else if dy < 0 {
+		goodmove = "down"
+	}
+
+	if isMoveSafe[goodmove] {
+		log.Printf("MOVE %d: %s\n", state.Turn, goodmove)
+		return BattlesnakeMoveResponse{Move: goodmove}
+	}
 
 	log.Printf("MOVE %d: %s\n", state.Turn, nextMove)
 	return BattlesnakeMoveResponse{Move: nextMove}
