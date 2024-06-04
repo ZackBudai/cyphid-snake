@@ -14,8 +14,32 @@ package main
 
 import (
 	"log"
+	"math"
 	"math/rand"
 )
+
+func ManhattanDistance(p1, p2 Coord) int {
+	return int(math.Abs(float64(p1.X-p2.X)) + math.Abs(float64(p1.Y-p2.Y)))
+}
+
+func FindClosestFood(start Coord, foodPoints []Coord) Coord {
+	if len(foodPoints) == 0 {
+		return Coord{} // Returning a default Point if the foodPoints list is empty
+	}
+
+	closest := foodPoints[0]
+	minDistance := ManhattanDistance(start, closest)
+
+	for _, food := range foodPoints[1:] {
+		distance := ManhattanDistance(start, food)
+		if distance < minDistance {
+			closest = food
+			minDistance = distance
+		}
+	}
+
+	return closest
+}
 
 // info is called when you create your Battlesnake on play.battlesnake.com
 // and controls your Battlesnake's appearance
@@ -25,10 +49,10 @@ func info() BattlesnakeInfoResponse {
 
 	return BattlesnakeInfoResponse{
 		APIVersion: "1",
-		Author:     "",        // TODO: Your Battlesnake username
-		Color:      "#888888", // TODO: Choose color
-		Head:       "default", // TODO: Choose head
-		Tail:       "default", // TODO: Choose tail
+		Author:     "crazycat911", // TODO: Your Battlesnake username
+		Color:      "#0384fc",     // TODO: Choose color
+		Head:       "default",     // TODO: Choose head
+		Tail:       "default",     // TODO: Choose tail
 	}
 }
 
@@ -72,14 +96,42 @@ func move(state GameState) BattlesnakeMoveResponse {
 	}
 
 	// TODO: Step 1 - Prevent your Battlesnake from moving out of bounds
-	// boardWidth := state.Board.Width
-	// boardHeight := state.Board.Height
+	boardWidth := state.Board.Width
+	boardHeight := state.Board.Height
 
-	// TODO: Step 2 - Prevent your Battlesnake from colliding with itself
-	// mybody := state.You.Body
+	if myHead.X == (boardWidth - 1) {
+		isMoveSafe["right"] = false
+	} else if myHead.X == 0 {
+		isMoveSafe["left"] = false
+	}
 
-	// TODO: Step 3 - Prevent your Battlesnake from colliding with other Battlesnakes
-	// opponents := state.Board.Snakes
+	if myHead.Y == (boardHeight - 1) {
+		isMoveSafe["up"] = false
+	} else if myHead.Y == 0 {
+		isMoveSafe["down"] = false
+	}
+
+	// TODO: Step 2 & 3 - Prevent your Battlesnake from colliding with other Battlesnakes (and itself)
+	snakes := state.Board.Snakes
+
+	for _, snake := range snakes {
+		for _, bodyPart := range snake.Body {
+			if bodyPart.X == myHead.X && bodyPart.Y == myHead.Y {
+				continue
+			}
+			if bodyPart.X == myHead.X-1 && bodyPart.Y == myHead.Y {
+				isMoveSafe["left"] = false
+			} else if bodyPart.X == myHead.X+1 && bodyPart.Y == myHead.Y {
+				isMoveSafe["right"] = false
+			}
+
+			if bodyPart.X == myHead.X && bodyPart.Y == myHead.Y-1 {
+				isMoveSafe["down"] = false
+			} else if bodyPart.X == myHead.X && bodyPart.Y == myHead.Y+1 {
+				isMoveSafe["up"] = false
+			}
+		}
+	}
 
 	// Are there any safe moves left?
 	safeMoves := []string{}
@@ -90,8 +142,8 @@ func move(state GameState) BattlesnakeMoveResponse {
 	}
 
 	if len(safeMoves) == 0 {
-		log.Printf("MOVE %d: No safe moves detected! Moving down\n", state.Turn)
-		return BattlesnakeMoveResponse{Move: "down"}
+		log.Printf("MOVE %d: No safe moves detected :( Moving up\n", state.Turn)
+		return BattlesnakeMoveResponse{Move: "up"}
 	}
 
 	// Choose a random move from the safe ones
@@ -99,6 +151,26 @@ func move(state GameState) BattlesnakeMoveResponse {
 
 	// TODO: Step 4 - Move towards food instead of random, to regain health and survive longer
 	// food := state.Board.Food
+
+	// closestFood := FindClosestFood(myHead, food)
+
+	// dx := closestFood.X - myHead.X
+	// dy := closestFood.Y - myHead.Y
+
+	// if dx > 0 {
+	// 	goodmove := "right"
+	// } else if dx < 0 {
+	// 	goodmove := "left"
+	// } else if dy > 0 {
+	// 	goodmove := "up"
+	// } else if dy < 0 {
+	// 	goodmove := "down"
+	// }
+
+	// if isMoveSafe[goodmove] {
+	// 	log.Printf("MOVE %d: %s\n", state.Turn, goodmove)
+	// 	return BattlesnakeMoveResponse{Move: goodmove}
+	// }
 
 	log.Printf("MOVE %d: %s\n", state.Turn, nextMove)
 	return BattlesnakeMoveResponse{Move: nextMove}
