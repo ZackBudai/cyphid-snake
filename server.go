@@ -7,9 +7,15 @@ import (
 	"os"
 )
 
+func enableCors(w *http.ResponseWriter) {
+	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+}
+
 // HTTP Handlers
 
 func HandleIndex(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+
 	response := info()
 
 	w.Header().Set("Content-Type", "application/json")
@@ -20,6 +26,8 @@ func HandleIndex(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleStart(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+
 	state := GameState{}
 	err := json.NewDecoder(r.Body).Decode(&state)
 	if err != nil {
@@ -33,6 +41,8 @@ func HandleStart(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleMove(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+
 	state := GameState{}
 	err := json.NewDecoder(r.Body).Decode(&state)
 	if err != nil {
@@ -51,6 +61,8 @@ func HandleMove(w http.ResponseWriter, r *http.Request) {
 }
 
 func HandleEnd(w http.ResponseWriter, r *http.Request) {
+	enableCors(&w)
+
 	state := GameState{}
 	err := json.NewDecoder(r.Body).Decode(&state)
 	if err != nil {
