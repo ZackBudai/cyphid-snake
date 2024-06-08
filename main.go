@@ -75,19 +75,16 @@ func detect_danger(state GameState) []Coord {
 		for _, bodypart := range snake.Body {
 			danger_zones = append(danger_zones, bodypart)
 		}
-	}
 
-	for _, snake := range snakes {
-		if snake.ID == mySnake.ID {
-			continue
+		if !(snake.ID == mySnake.ID) {
+			if snake.Length >= mySnake.Length {
+				danger_zones = append(danger_zones, Coord{X: snake.Head.X + 1, Y: snake.Head.Y})
+				danger_zones = append(danger_zones, Coord{X: snake.Head.X - 1, Y: snake.Head.Y})
+				danger_zones = append(danger_zones, Coord{X: snake.Head.X, Y: snake.Head.Y + 1})
+				danger_zones = append(danger_zones, Coord{X: snake.Head.X, Y: snake.Head.Y - 1})
+			}
 		}
 
-		if snake.Length >= mySnake.Length {
-			danger_zones = append(danger_zones, Coord{X: snake.Head.X + 1, Y: snake.Head.Y})
-			danger_zones = append(danger_zones, Coord{X: snake.Head.X - 1, Y: snake.Head.Y})
-			danger_zones = append(danger_zones, Coord{X: snake.Head.X, Y: snake.Head.Y + 1})
-			danger_zones = append(danger_zones, Coord{X: snake.Head.X, Y: snake.Head.Y - 1})
-		}
 	}
 
 	return danger_zones
