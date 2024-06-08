@@ -51,8 +51,8 @@ func info() BattlesnakeInfoResponse {
 		APIVersion: "1",
 		Author:     "crazycat911", // TODO: Your Battlesnake username
 		Color:      "#07e3a5",     // TODO: Choose color
-		Head:       "gamer",     // TODO: Choose head
-		Tail:       "coffee",     // TODO: Choose tail
+		Head:       "gamer",       // TODO: Choose head
+		Tail:       "coffee",      // TODO: Choose tail
 	}
 }
 
@@ -66,10 +66,39 @@ func end(state GameState) {
 	log.Printf("GAME OVER\n\n")
 }
 
+func detect_danger(state GameState) []Coord {
+	mySnake := state.You
+	snakes := state.Board.Snakes
+	danger_zones := []Coord{}
+
+	for _, snake := range snakes {
+		for _, bodypart := range snake.Body {
+			danger_zones = append(danger_zones, bodypart)
+		}
+	}
+
+	for _, snake := range snakes {
+		if snake.ID == mySnake.ID {
+			continue
+		}
+
+		if snake.Length >= mySnake.Length {
+			danger_zones = append(danger_zones, Coord{X: snake.Head.X + 1, Y: snake.Head.Y})
+			danger_zones = append(danger_zones, Coord{X: snake.Head.X - 1, Y: snake.Head.Y})
+			danger_zones = append(danger_zones, Coord{X: snake.Head.X, Y: snake.Head.Y + 1})
+			danger_zones = append(danger_zones, Coord{X: snake.Head.X, Y: snake.Head.Y - 1})
+		}
+	}
+
+	return danger_zones
+}
+
 // move is called on every turn and returns your next move
 // Valid moves are "up", "down", "left", or "right"
 // See https://docs.battlesnake.com/api/example-move for available data
 func move(state GameState) BattlesnakeMoveResponse {
+
+	myHead := state.You.Body[0] // Coordinates of your head
 
 	isMoveSafe := map[string]bool{
 		"up":    true,
@@ -78,58 +107,15 @@ func move(state GameState) BattlesnakeMoveResponse {
 		"right": true,
 	}
 
-	// We've included code to prevent your Battlesnake from moving backwards
-	myHead := state.You.Body[0] // Coordinates of your head
-	myNeck := state.You.Body[1] // Coordinates of your "neck"
-
-	if myNeck.X < myHead.X { // Neck is left of head, don't move left
-		isMoveSafe["left"] = false
-
-	} else if myNeck.X > myHead.X { // Neck is right of head, don't move right
-		isMoveSafe["right"] = false
-
-	} else if myNeck.Y < myHead.Y { // Neck is below head, don't move down
-		isMoveSafe["down"] = false
-
-	} else if myNeck.Y > myHead.Y { // Neck is above head, don't move up
-		isMoveSafe["up"] = false
-	}
-
-	// TODO: Step 1 - Prevent your Battlesnake from moving out of bounds
-	boardWidth := state.Board.Width
-	boardHeight := state.Board.Height
-
-	if myHead.X == (boardWidth - 1) {
-		isMoveSafe["right"] = false
-	} else if myHead.X == 0 {
-		isMoveSafe["left"] = false
-	}
-
-	if myHead.Y == (boardHeight - 1) {
-		isMoveSafe["up"] = false
-	} else if myHead.Y == 0 {
-		isMoveSafe["down"] = false
-	}
-
-	// TODO: Step 2 & 3 - Prevent your Battlesnake from colliding with other Battlesnakes (and itself)
-	snakes := state.Board.Snakes
-
-	for _, snake := range snakes {
-		for _, bodyPart := range snake.Body {
-			if bodyPart.X == myHead.X && bodyPart.Y == myHead.Y {
-				continue
-			}
-			if bodyPart.X == myHead.X-1 && bodyPart.Y == myHead.Y {
-				isMoveSafe["left"] = false
-			} else if bodyPart.X == myHead.X+1 && bodyPart.Y == myHead.Y {
-				isMoveSafe["right"] = false
-			}
-
-			if bodyPart.X == myHead.X && bodyPart.Y == myHead.Y-1 {
-				isMoveSafe["down"] = false
-			} else if bodyPart.X == myHead.X && bodyPart.Y == myHead.Y+1 {
-				isMoveSafe["up"] = false
-			}
+	for _, dangerZone := range detect_danger(state) {
+		if (Coord{X: myHead.X + 1, Y: myHead.Y}) == dangerZone {
+			isMoveSafe["right"] = false
+		} else if (Coord{X: myHead.X - 1, Y: myHead.Y}) == dangerZone {
+			isMoveSafe["left"] = false
+		} else if (Coord{X: myHead.X, Y: myHead.Y + 1}) == dangerZone {
+			isMoveSafe["up"] = false
+		} else if (Coord{X: myHead.X, Y: myHead.Y - 1}) == dangerZone {
+			isMoveSafe["down"] = false
 		}
 	}
 
