@@ -1,22 +1,10 @@
 package main
 
-// Welcome to
-// __________         __    __  .__                               __
-// \______   \_____ _/  |__/  |_|  |   ____   ______ ____ _____  |  | __ ____
-//  |    |  _/\__  \\   __\   __\  | _/ __ \ /  ___//    \\__  \ |  |/ // __ \
-//  |    |   \ / __ \|  |  |  | |  |_\  ___/ \___ \|   |  \/ __ \|    <\  ___/
-//  |________/(______/__|  |__| |____/\_____>______>___|__(______/__|__\\_____>
-//
-// This file can be a nice home for your Battlesnake logic and helper functions.
-//
-// To get you started we've included code to prevent your Battlesnake from moving backwards.
-// For more info see https://docs.battlesnake.com/
-
 import (
 	"log"
 	"math"
-	"math/rand"
 )
+
 
 func ManhattanDistance(p1, p2 Coord) int {
 	return int(math.Abs(float64(p1.X-p2.X)) + math.Abs(float64(p1.Y-p2.Y)))
@@ -41,9 +29,6 @@ func FindClosestFood(start Coord, foodPoints []Coord) Coord {
 	return closest
 }
 
-// info is called when you create your Battlesnake on play.battlesnake.com
-// and controls your Battlesnake's appearance
-// TIP: If you open your Battlesnake URL in a browser you should see this data
 func info() BattlesnakeInfoResponse {
 	log.Println("INFO")
 
@@ -56,12 +41,10 @@ func info() BattlesnakeInfoResponse {
 	}
 }
 
-// start is called when your Battlesnake begins a game
 func start(state GameState) {
 	log.Println("GAME START")
 }
 
-// end is called when your Battlesnake finishes a game
 func end(state GameState) {
 	log.Printf("GAME OVER\n\n")
 }
@@ -73,7 +56,7 @@ func detect_danger(state GameState) []Coord {
 
 	for _, snake := range snakes {
 		for _, bodypart := range snake.Body {
-			if bodypart == snake.Body[snake.Length-1] {
+			if bodypart == snake.Body[snake.Length - 1] {
 				if snake.Health == 100 {
 					danger_zones = append(danger_zones, bodypart)
 				}
@@ -94,11 +77,38 @@ func detect_danger(state GameState) []Coord {
 	return danger_zones
 }
 
-// move is called on every turn and returns your next move
-// Valid moves are "up", "down", "left", or "right"
-// See https://docs.battlesnake.com/api/example-move for available data
-func move(state GameState) BattlesnakeMoveResponse {
+func isCoordInBoard(c Coord, board Board) bool {
+	return c.X >= 0 && c.Y >= 0 && c.X < board.Width && c.Y < board.Height
+}
 
+func floodFill(start Coord, board Board, dangerZones map[Coord]bool) int {
+	queue := []Coord{start}
+	visited := map[Coord]bool{start: true}
+	area := 0
+	
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		area++
+
+		directions := []Coord{
+			{X: current.X + 1, Y: current.Y},
+			{X: current.X - 1, Y: current.Y},
+			{X: current.X, Y: current.Y + 1},
+			{X: current.X, Y: current.Y - 1},
+		}
+
+		for _, neighbor := range directions {
+			if isCoordInBoard(neighbor, board) && !visited[neighbor] && !dangerZones[neighbor] {
+				visited[neighbor] = true
+				queue = append(queue, neighbor)
+			}
+		}
+	}
+	return area
+}
+
+func move(state GameState) BattlesnakeMoveResponse {
 	myHead := state.You.Body[0] // Coordinates of your head
 
 	isMoveSafe := map[string]bool{
@@ -120,7 +130,13 @@ func move(state GameState) BattlesnakeMoveResponse {
 		isMoveSafe["up"] = false
 	}
 
-	for _, dangerZone := range detect_danger(state) {
+	dangerZones := detect_danger(state)
+	dangerMap := make(map[Coord]bool)
+	for _, dangerZone := range dangerZones {
+		dangerMap[dangerZone] = true
+	}
+
+	for _, dangerZone := range dangerZones {
 		if (Coord{X: myHead.X + 1, Y: myHead.Y}) == dangerZone {
 			isMoveSafe["right"] = false
 		} else if (Coord{X: myHead.X - 1, Y: myHead.Y}) == dangerZone {
@@ -129,6 +145,28 @@ func move(state GameState) BattlesnakeMoveResponse {
 			isMoveSafe["up"] = false
 		} else if (Coord{X: myHead.X, Y: myHead.Y - 1}) == dangerZone {
 			isMoveSafe["down"] = false
+		}
+	}
+
+	// Ensure moves don't lead to an area smaller than the snake's length
+	for move, isSafe := range isMoveSafe {
+		if isSafe {
+			var newHead Coord
+			switch move {
+			case "up":
+				newHead = Coord{X: myHead.X, Y: myHead.Y + 1}
+			case "down":
+				newHead = Coord{X: myHead.X, Y: myHead.Y - 1}
+			case "left":
+				newHead = Coord{X: myHead.X - 1, Y: myHead.Y}
+			case "right":
+				newHead = Coord{X: myHead.X + 1, Y: myHead.Y}
+			}
+
+			area := floodFill(newHead, state.Board, dangerMap)
+			if area < state.You.Length {
+				isMoveSafe[move] = false
+			}
 		}
 	}
 
@@ -145,36 +183,57 @@ func move(state GameState) BattlesnakeMoveResponse {
 		return BattlesnakeMoveResponse{Move: "up"}
 	}
 
-	// Choose a random move from the safe ones
-	nextMove := safeMoves[rand.Intn(len(safeMoves))]
-
-	// TODO: Step 4 - Move towards food instead of random, to regain health and survive longer
+	// Follow the closest food
 	food := state.Board.Food
+	if len(food) > 0 {
+		closestFood := FindClosestFood(myHead, food)
+		dx := closestFood.X - myHead.X
+		dy := closestFood.Y - myHead.Y
 
-	closestFood := FindClosestFood(myHead, food)
+		var moveTowardsFood string
 
-	dx := closestFood.X - myHead.X
-	dy := closestFood.Y - myHead.Y
+		if dx > 0 && isMoveSafe["right"] {
+			moveTowardsFood = "right"
+		} else if dx < 0 && isMoveSafe["left"] {
+			moveTowardsFood = "left"
+		} else if dy > 0 && isMoveSafe["up"] {
+			moveTowardsFood = "up"
+		} else if dy < 0 && isMoveSafe["down"] {
+			moveTowardsFood = "down"
+		}
 
-	var goodmove string
-
-	if dx > 0 {
-		goodmove = "right"
-	} else if dx < 0 {
-		goodmove = "left"
-	} else if dy > 0 {
-		goodmove = "up"
-	} else if dy < 0 {
-		goodmove = "down"
+		if moveTowardsFood != "" {
+			log.Printf("MOVE %d: Moving towards food %s\n", state.Turn, moveTowardsFood)
+			return BattlesnakeMoveResponse{Move: moveTowardsFood}
+		}
 	}
 
-	if isMoveSafe[goodmove] {
-		log.Printf("MOVE %d: %s\n", state.Turn, goodmove)
-		return BattlesnakeMoveResponse{Move: goodmove}
+	// If no food following move is possible, pick the safest move
+	bestMove := safeMoves[0]
+	maxArea := -1
+
+	for _, move := range safeMoves {
+		var newHead Coord
+		switch move {
+		case "up":
+			newHead = Coord{X: myHead.X, Y: myHead.Y + 1}
+		case "down":
+			newHead = Coord{X: myHead.X, Y: myHead.Y - 1}
+		case "left":
+			newHead = Coord{X: myHead.X - 1, Y: myHead.Y}
+		case "right":
+			newHead = Coord{X: myHead.X + 1, Y: myHead.Y}
+		}
+
+		area := floodFill(newHead, state.Board, dangerMap)
+		if area > maxArea {
+			maxArea = area
+			bestMove = move
+		}
 	}
 
-	log.Printf("MOVE %d: %s\n", state.Turn, nextMove)
-	return BattlesnakeMoveResponse{Move: nextMove}
+	log.Printf("MOVE %d: %s\n", state.Turn, bestMove)
+	return BattlesnakeMoveResponse{Move: bestMove}
 }
 
 func main() {
