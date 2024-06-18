@@ -73,7 +73,13 @@ func detect_danger(state GameState) []Coord {
 
 	for _, snake := range snakes {
 		for _, bodypart := range snake.Body {
-			danger_zones = append(danger_zones, bodypart)
+			if bodypart == snake.Body[snake.Length-1] {
+				if snake.Health == 100 {
+					danger_zones = append(danger_zones, bodypart)
+				}
+			} else {
+				danger_zones = append(danger_zones, bodypart)
+			}
 		}
 
 		if !(snake.ID == mySnake.ID) {
@@ -84,9 +90,7 @@ func detect_danger(state GameState) []Coord {
 				danger_zones = append(danger_zones, Coord{X: snake.Head.X, Y: snake.Head.Y - 1})
 			}
 		}
-
 	}
-	
 	return danger_zones
 }
 
@@ -115,7 +119,7 @@ func move(state GameState) BattlesnakeMoveResponse {
 	} else if myHead.Y == state.Board.Height-1 {
 		isMoveSafe["up"] = false
 	}
-	
+
 	for _, dangerZone := range detect_danger(state) {
 		if (Coord{X: myHead.X + 1, Y: myHead.Y}) == dangerZone {
 			isMoveSafe["right"] = false
