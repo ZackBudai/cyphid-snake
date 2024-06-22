@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"math"
+	"sort"
 )
 
 const (
@@ -122,6 +123,7 @@ func move(state GameState) BattlesnakeMoveResponse {
 		RIGHT: true,
 	}
 
+	// Check walls
 	if myHead.X == 0 {
 		isMoveSafe[LEFT] = false
 	} else if myHead.X == state.Board.Width-1 {
@@ -136,6 +138,7 @@ func move(state GameState) BattlesnakeMoveResponse {
 
 	dangerZones := detectDanger(state)
 
+	// Check self and other snakes
 	for direction, safe := range isMoveSafe {
 		if safe {
 			var newHead Coord
@@ -163,35 +166,40 @@ func move(state GameState) BattlesnakeMoveResponse {
 		}
 	}
 
+	// No safe moves
 	if len(safeMoves) == 0 {
 		log.Printf("MOVE %d: No safe moves detected :( Moving up\n", state.Turn)
 		return BattlesnakeMoveResponse{Move: UP}
 	}
 
-	food := state.Board.Food
-	if len(food) > 0 {
-		closestFood := FindClosestFood(myHead, food)
-		dx := closestFood.X - myHead.X
-		dy := closestFood.Y - myHead.Y
+	// Move towards food if low health
+	if state.You.Health < 50 {
+		food := state.Board.Food
+		if len(food) > 0 {
+			closestFood := FindClosestFood(myHead, food)
+			dx := closestFood.X - myHead.X
+			dy := closestFood.Y - myHead.Y
 
-		var moveTowardsFood string
+			var moveTowardsFood string
 
-		if dx > 0 && isMoveSafe[RIGHT] {
-			moveTowardsFood = RIGHT
-		} else if dx < 0 && isMoveSafe[LEFT] {
-			moveTowardsFood = LEFT
-		} else if dy > 0 && isMoveSafe[UP] {
-			moveTowardsFood = UP
-		} else if dy < 0 && isMoveSafe[DOWN] {
-			moveTowardsFood = DOWN
-		}
+			if dx > 0 && isMoveSafe[RIGHT] {
+				moveTowardsFood = RIGHT
+			} else if dx < 0 && isMoveSafe[LEFT] {
+				moveTowardsFood = LEFT
+			} else if dy > 0 && isMoveSafe[UP] {
+				moveTowardsFood = UP
+			} else if dy < 0 && isMoveSafe[DOWN] {
+				moveTowardsFood = DOWN
+			}
 
-		if moveTowardsFood != "" {
-			log.Printf("MOVE %d: Moving towards food %s\n", state.Turn, moveTowardsFood)
-			return BattlesnakeMoveResponse{Move: moveTowardsFood}
+			if moveTowardsFood != "" {
+				log.Printf("MOVE %d: Moving towards food %s\n", state.Turn, moveTowardsFood)
+				return BattlesnakeMoveResponse{Move: moveTowardsFood}
+			}
 		}
 	}
 
+	// Choose best move based on flood fill
 	bestMove := safeMoves[0]
 	maxArea := -1
 	for _, move := range safeMoves {
