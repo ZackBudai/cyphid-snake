@@ -1,8 +1,8 @@
 package main
 
 import (
-	"log"
 	"container/heap"
+	"log"
 	"math"
 )
 
@@ -118,8 +118,6 @@ func moveTowards(from, to Coord) string {
 	}
 	return ""
 }
-
-
 
 func moveTowardsTail(state GameState) BattlesnakeMoveResponse {
 	start := state.You.Head
