@@ -2,38 +2,9 @@ package main
 
 import (
 	"log"
+	"container/heap"
 	"math"
 )
-
-const (
-	UP    = "up"
-	DOWN  = "down"
-	LEFT  = "left"
-	RIGHT = "right"
-)
-
-func ManhattanDistance(p1, p2 Coord) int {
-	return int(math.Abs(float64(p1.X-p2.X)) + math.Abs(float64(p1.Y-p2.Y)))
-}
-
-func FindClosestFood(start Coord, foodPoints []Coord) Coord {
-	if len(foodPoints) == 0 {
-		return Coord{} // Returning a default Point if the foodPoints list is empty
-	}
-
-	closest := foodPoints[0]
-	minDistance := ManhattanDistance(start, closest)
-
-	for _, food := range foodPoints[1:] {
-		distance := ManhattanDistance(start, food)
-		if distance < minDistance {
-			closest = food
-			minDistance = distance
-		}
-	}
-
-	return closest
-}
 
 func info() BattlesnakeInfoResponse {
 	log.Println("INFO")
@@ -55,164 +26,389 @@ func end(state GameState) {
 	log.Printf("GAME OVER\n\n")
 }
 
-func detectDanger(state GameState) map[Coord]bool {
-	mySnake := state.You
-	snakes := state.Board.Snakes
-	dangerZones := make(map[Coord]bool)
+// Define directions
+var directions = []string{"up", "down", "left", "right"}
 
-	for _, snake := range snakes {
-		for i, bodypart := range snake.Body {
-			dangerZones[bodypart] = true
-			if i == len(snake.Body)-1 && snake.Health == 100 {
-				dangerZones[bodypart] = true
+// PriorityQueue for A* algorithm
+type PriorityQueue []*Node
+
+func (pq PriorityQueue) Len() int           { return len(pq) }
+func (pq PriorityQueue) Less(i, j int) bool { return pq[i].priority < pq[j].priority }
+func (pq PriorityQueue) Swap(i, j int)      { pq[i], pq[j] = pq[j], pq[i] }
+
+func (pq *PriorityQueue) Push(x interface{}) {
+	item := x.(*Node)
+	*pq = append(*pq, item)
+}
+
+func (pq *PriorityQueue) Pop() interface{} {
+	old := *pq
+	n := len(old)
+	item := old[n-1]
+	*pq = old[0 : n-1]
+	return item
+}
+
+// Node for pathfinding algorithms
+type Node struct {
+	coord     Coord
+	parent    *Node
+	g         int
+	h         int
+	f         int
+	priority  int
+	direction string
+}
+
+func move(state GameState) BattlesnakeMoveResponse {
+	if state.You.Health < 50 {
+		return moveTowardsFood(state)
+	}
+	return moveTowardsTail(state)
+}
+
+func moveTowardsFood(state GameState) BattlesnakeMoveResponse {
+	start := state.You.Head
+	var closestFood Coord
+	minDist := math.MaxInt32
+	var nextMove string
+
+	for _, food := range state.Board.Food {
+		path, dist := bfs(state, start, food)
+		if dist < minDist {
+			minDist = dist
+			closestFood = food
+			if len(path) > 0 {
+				nextMove = path[0]
 			}
 		}
+	}
 
-		if snake.ID != mySnake.ID && snake.Length >= mySnake.Length {
-			dangerZones[Coord{X: snake.Head.X + 1, Y: snake.Head.Y}] = true
-			dangerZones[Coord{X: snake.Head.X - 1, Y: snake.Head.Y}] = true
-			dangerZones[Coord{X: snake.Head.X, Y: snake.Head.Y + 1}] = true
-			dangerZones[Coord{X: snake.Head.X, Y: snake.Head.Y - 1}] = true
+	if nextMove == "" {
+		// If no path to food is found, move towards the closest food using Manhattan distance
+		for _, food := range state.Board.Food {
+			dist := manhattanDistance(start, food)
+			if dist < minDist {
+				minDist = dist
+				closestFood = food
+			}
+		}
+		nextMove = moveTowards(start, closestFood)
+	}
+
+	if nextMove == "" {
+		nextMove = safestMove(state)
+	}
+
+	return BattlesnakeMoveResponse{
+		Move:  nextMove,
+		Shout: "Moving towards food!",
+	}
+}
+
+func moveTowards(from, to Coord) string {
+	if from.X < to.X {
+		return "right"
+	} else if from.X > to.X {
+		return "left"
+	} else if from.Y < to.Y {
+		return "up"
+	} else if from.Y > to.Y {
+		return "down"
+	}
+	return ""
+}
+
+
+
+func moveTowardsTail(state GameState) BattlesnakeMoveResponse {
+	start := state.You.Head
+	tail := state.You.Body[len(state.You.Body)-1]
+
+	path, _ := aStar(state, start, tail)
+	if len(path) > 0 {
+		return BattlesnakeMoveResponse{
+			Move:  path[0],
+			Shout: "Moving towards my tail!",
 		}
 	}
 
-	for _, location := range getNeighbors(state.You.Body[0]) {
-		if location == state.You.Body[1] {
-			dangerZones[location] = true
+	// If no path to tail, move to the largest open space
+	largestRegion := findLargestRegion(state)
+	if len(largestRegion) > 0 {
+		move := moveWithinRegion(state, largestRegion)
+		return BattlesnakeMoveResponse{
+			Move:  move,
+			Shout: "Moving to open space!",
 		}
 	}
 
-	return dangerZones
-}
-
-func isCoordInBoard(c Coord, board Board) bool {
-	return c.X >= 0 && c.Y >= 0 && c.X < board.Width && c.Y < board.Height
-}
-
-func getNeighbors(c Coord) []Coord {
-	return []Coord{
-		{X: c.X + 1, Y: c.Y},
-		{X: c.X - 1, Y: c.Y},
-		{X: c.X, Y: c.Y + 1},
-		{X: c.X, Y: c.Y - 1},
+	// If all else fails, make a safe move
+	return BattlesnakeMoveResponse{
+		Move:  safestMove(state),
+		Shout: "Making a safe move!",
 	}
 }
 
-func floodFill(start Coord, board Board, dangerZones map[Coord]bool) int {
-	queue := []Coord{start}
-	visited := map[Coord]bool{start: true}
-	area := 0
+func bfs(state GameState, start, goal Coord) ([]string, int) {
+	queue := []Node{{coord: start}}
+	visited := make(map[Coord]bool)
+	visited[start] = true
 
 	for len(queue) > 0 {
 		current := queue[0]
 		queue = queue[1:]
-		area++
 
-		for _, neighbor := range getNeighbors(current) {
-			if isCoordInBoard(neighbor, board) && !visited[neighbor] && !dangerZones[neighbor] {
-				visited[neighbor] = true
-				queue = append(queue, neighbor)
+		if current.coord == goal {
+			return reconstructPath(current), len(reconstructPath(current))
+		}
+
+		for _, dir := range directions {
+			next := moveCoord(current.coord, dir)
+			if !visited[next] && isValidMove(state, next) {
+				visited[next] = true
+				newNode := Node{coord: next, parent: &current, direction: dir}
+				queue = append(queue, newNode)
 			}
 		}
 	}
-	return area
+
+	return nil, math.MaxInt32
 }
 
-func move(state GameState) BattlesnakeMoveResponse {
-	myHead := state.You.Body[0] // Coordinates of your head
+func aStar(state GameState, start, goal Coord) ([]string, int) {
+	openSet := &PriorityQueue{}
+	heap.Init(openSet)
+	startNode := &Node{coord: start, g: 0, h: manhattanDistance(start, goal), f: 0}
+	heap.Push(openSet, startNode)
 
-	// Initialize safe moves
-	isMoveSafe := map[string]bool{
-		UP:    true,
-		DOWN:  true,
-		LEFT:  true,
-		RIGHT: true,
-	}
+	cameFrom := make(map[Coord]*Node)
+	gScore := make(map[Coord]int)
+	gScore[start] = 0
 
-	// Check wall collisions
-	if myHead.X == 0 {
-		isMoveSafe[LEFT] = false
-	} else if myHead.X == state.Board.Width-1 {
-		isMoveSafe[RIGHT] = false
-	}
+	for openSet.Len() > 0 {
+		current := heap.Pop(openSet).(*Node)
 
-	if myHead.Y == 0 {
-		isMoveSafe[DOWN] = false
-	} else if myHead.Y == state.Board.Height-1 {
-		isMoveSafe[UP] = false
-	}
+		if current.coord == goal {
+			return reconstructPath(*current), current.g
+		}
 
-	dangerZones := detectDanger(state)
+		for _, dir := range directions {
+			neighbor := moveCoord(current.coord, dir)
+			if !isValidMove(state, neighbor) {
+				continue
+			}
 
-	// Check self and other snakes using the dangerZones map
-	directions := map[string]Coord{
-		UP:    {X: myHead.X, Y: myHead.Y + 1},
-		DOWN:  {X: myHead.X, Y: myHead.Y - 1},
-		LEFT:  {X: myHead.X - 1, Y: myHead.Y},
-		RIGHT: {X: myHead.X + 1, Y: myHead.Y},
-	}
+			tentativeGScore := gScore[current.coord] + getEdgeWeight(state, current.coord, neighbor)
 
-	for direction, newHead := range directions {
-		if isMoveSafe[direction] && (dangerZones[newHead] || floodFill(newHead, state.Board, dangerZones) < state.You.Length) {
-			isMoveSafe[direction] = false
+			if gScore[neighbor] == 0 || tentativeGScore < gScore[neighbor] {
+				cameFrom[neighbor] = current
+				gScore[neighbor] = tentativeGScore
+				fScore := tentativeGScore + manhattanDistance(neighbor, goal)
+				neighborNode := &Node{
+					coord:     neighbor,
+					parent:    current,
+					g:         tentativeGScore,
+					h:         manhattanDistance(neighbor, goal),
+					f:         fScore,
+					priority:  fScore,
+					direction: dir,
+				}
+				heap.Push(openSet, neighborNode)
+			}
 		}
 	}
 
-	// Determine safe moves
-	safeMoves := []string{}
-	for move, safe := range isMoveSafe {
-		if safe {
-			safeMoves = append(safeMoves, move)
+	return nil, math.MaxInt32
+}
+
+func findLargestRegion(state GameState) map[Coord]bool {
+	largestRegion := make(map[Coord]bool)
+	visited := make(map[Coord]bool)
+
+	for y := 0; y < state.Board.Height; y++ {
+		for x := 0; x < state.Board.Width; x++ {
+			coord := Coord{X: x, Y: y}
+			if !visited[coord] && isValidMove(state, coord) {
+				region := floodFill(state, coord, visited)
+				if len(region) > len(largestRegion) {
+					largestRegion = region
+				}
+			}
 		}
 	}
 
-	// No safe moves
+	return largestRegion
+}
+
+func floodFill(state GameState, start Coord, visited map[Coord]bool) map[Coord]bool {
+	region := make(map[Coord]bool)
+	queue := []Coord{start}
+	visited[start] = true
+	region[start] = true
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		for _, dir := range directions {
+			next := moveCoord(current, dir)
+			if !visited[next] && isValidMove(state, next) {
+				visited[next] = true
+				region[next] = true
+				queue = append(queue, next)
+			}
+		}
+	}
+
+	return region
+}
+
+func moveWithinRegion(state GameState, region map[Coord]bool) string {
+	head := state.You.Head
+	maxSpace := 0
+	bestMove := ""
+
+	for _, dir := range directions {
+		next := moveCoord(head, dir)
+		if region[next] {
+			space := countAccessibleSpace(state, next, region)
+			if space > maxSpace {
+				maxSpace = space
+				bestMove = dir
+			}
+		}
+	}
+
+	if bestMove == "" {
+		return safestMove(state)
+	}
+
+	return bestMove
+}
+
+func countAccessibleSpace(state GameState, start Coord, region map[Coord]bool) int {
+	visited := make(map[Coord]bool)
+	queue := []Coord{start}
+	visited[start] = true
+	count := 0
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+		count++
+
+		for _, dir := range directions {
+			next := moveCoord(current, dir)
+			if !visited[next] && region[next] {
+				visited[next] = true
+				queue = append(queue, next)
+			}
+		}
+	}
+
+	return count
+}
+
+func safestMove(state GameState) string {
+	head := state.You.Head
+	safeMoves := make(map[string]bool)
+
+	for _, dir := range directions {
+		next := moveCoord(head, dir)
+		if isValidMove(state, next) {
+			safeMoves[dir] = true
+		}
+	}
+
 	if len(safeMoves) == 0 {
-		log.Printf("MOVE %d: No safe moves detected :( Moving up\n", state.Turn)
-		return BattlesnakeMoveResponse{Move: UP}
+		return "up" // No safe moves, just go up
 	}
 
-	// Move towards food if low health
-	if state.You.Health < 50 {
-		food := state.Board.Food
-		if len(food) > 0 {
-			closestFood := FindClosestFood(myHead, food)
-			dx := closestFood.X - myHead.X
-			dy := closestFood.Y - myHead.Y
-
-			var moveTowardsFood string
-
-			if dx > 0 && isMoveSafe[RIGHT] {
-				moveTowardsFood = RIGHT
-			} else if dx < 0 && isMoveSafe[LEFT] {
-				moveTowardsFood = LEFT
-			} else if dy > 0 && isMoveSafe[UP] {
-				moveTowardsFood = UP
-			} else if dy < 0 && isMoveSafe[DOWN] {
-				moveTowardsFood = DOWN
-			}
-
-			if moveTowardsFood != "" {
-				log.Printf("MOVE %d: Moving towards food %s\n", state.Turn, moveTowardsFood)
-				return BattlesnakeMoveResponse{Move: moveTowardsFood}
+	// Prefer moves that don't reduce options
+	for _, dir := range directions {
+		if safeMoves[dir] {
+			next := moveCoord(head, dir)
+			if countSafeMoves(state, next) >= len(safeMoves) {
+				return dir
 			}
 		}
 	}
 
-	// Choose the best move based on flood fill algorithm
-	bestMove := safeMoves[0]
-	maxArea := -1
-	for _, move := range safeMoves {
-		newHead := directions[move]
-		area := floodFill(newHead, state.Board, dangerZones)
-		if area > maxArea {
-			maxArea = area
-			bestMove = move
+	// If all moves reduce options, pick the first safe move
+	for _, dir := range directions {
+		if safeMoves[dir] {
+			return dir
 		}
 	}
 
-	log.Printf("MOVE %d: %s\n", state.Turn, bestMove)
-	return BattlesnakeMoveResponse{Move: bestMove}
+	return "up" // Fallback
+}
+
+func countSafeMoves(state GameState, coord Coord) int {
+	count := 0
+	for _, dir := range directions {
+		next := moveCoord(coord, dir)
+		if isValidMove(state, next) {
+			count++
+		}
+	}
+	return count
+}
+
+func isValidMove(state GameState, coord Coord) bool {
+	// Check if the coordinate is within the board
+	if coord.X < 0 || coord.X >= state.Board.Width || coord.Y < 0 || coord.Y >= state.Board.Height {
+		return false
+	}
+
+	// Check if the coordinate is occupied by a snake
+	for _, snake := range state.Board.Snakes {
+		for _, body := range snake.Body {
+			if body == coord {
+				return false
+			}
+		}
+	}
+
+	return true
+}
+
+func getEdgeWeight(state GameState, from, to Coord) int {
+	for _, snake := range state.Board.Snakes {
+		if snake.ID != state.You.ID && manhattanDistance(snake.Head, to) == 1 && len(snake.Body) >= len(state.You.Body) {
+			return 4 // Risky move, potential head-to-head collision
+		}
+	}
+	return 1 // Safe move
+}
+
+func moveCoord(coord Coord, direction string) Coord {
+	switch direction {
+	case "up":
+		return Coord{X: coord.X, Y: coord.Y + 1}
+	case "down":
+		return Coord{X: coord.X, Y: coord.Y - 1}
+	case "left":
+		return Coord{X: coord.X - 1, Y: coord.Y}
+	case "right":
+		return Coord{X: coord.X + 1, Y: coord.Y}
+	}
+	return coord
+}
+
+func manhattanDistance(a, b Coord) int {
+	return int(math.Abs(float64(a.X-b.X)) + math.Abs(float64(a.Y-b.Y)))
+}
+
+func reconstructPath(node Node) []string {
+	path := []string{}
+	current := &node
+	for current.parent != nil {
+		path = append([]string{current.direction}, path...)
+		current = current.parent
+	}
+	return path
 }
 
 func main() {
