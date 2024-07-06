@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"math"
+	"sort"
 )
 
 func main() {
@@ -30,71 +31,52 @@ func end(state GameState) {
 }
 
 // ============ Implementation ==========
+// Directions
+var directions = map[string]Coord{
+	"up":    {X: 0, Y: 1},
+	"down":  {X: 0, Y: -1},
+	"left":  {X: -1, Y: 0},
+	"right": {X: 1, Y: 0},
+}
 
-// Possible moves
-var moves = []string{"up", "down", "left", "right"}
-
-// move decides the next move for the Battlesnake
 func move(state GameState) BattlesnakeMoveResponse {
 	possibleMoves := getPossibleMoves(state)
 	if len(possibleMoves) == 0 {
 		return BattlesnakeMoveResponse{Move: "up", Shout: "No safe moves!"}
 	}
 
-	// Score moves based on various factors
-	moveScores := make(map[string]int)
-	for _, move := range possibleMoves {
-		moveScores[move] = 0
-		moveScores[move] += scoreFood(state, move)
-		moveScores[move] += scoreSpace(state, move)
-		moveScores[move] += scoreAggression(state, move)
-		moveScores[move] -= scoreHazards(state, move)
-	}
-
-	// Choose the move with the highest score
-	bestMove := possibleMoves[0]
-	bestScore := moveScores[bestMove]
-	for _, move := range possibleMoves[1:] {
-		if moveScores[move] > bestScore {
-			bestMove = move
-			bestScore = moveScores[move]
-		}
-	}
-
-	return BattlesnakeMoveResponse{Move: bestMove, Shout: "Moving " + bestMove}
+	move := getBestMove(state, possibleMoves)
+	return BattlesnakeMoveResponse{Move: move, Shout: "Moving " + move + "!"}
 }
 
-// getPossibleMoves returns a list of safe moves
 func getPossibleMoves(state GameState) []string {
 	possibleMoves := []string{}
-	head := state.You.Head
-	for _, move := range moves {
-		newPos := getNextPosition(head, move)
-		if isSafe(newPos, state) {
-			possibleMoves = append(possibleMoves, move)
+	myHead := state.You.Head
+
+	for direction, offset := range directions {
+		newPos := Coord{X: myHead.X + offset.X, Y: myHead.Y + offset.Y}
+		if isSafeMove(newPos, state) {
+			possibleMoves = append(possibleMoves, direction)
 		}
 	}
+
 	return possibleMoves
 }
 
-// isSafe checks if a position is safe to move to
-func isSafe(pos Coord, state GameState) bool {
+func isSafeMove(pos Coord, state GameState) bool {
 	// Check board boundaries
 	if pos.X < 0 || pos.Y < 0 || pos.X >= state.Board.Width || pos.Y >= state.Board.Height {
 		return false
 	}
 
-	// Check for collision with own body (except tail)
-	for i, bodyPart := range state.You.Body[:len(state.You.Body)-1] {
-		if i == 0 {
-			continue // Skip head
-		}
+	// Check collision with own body
+	for _, bodyPart := range state.You.Body[1:] {
 		if pos.X == bodyPart.X && pos.Y == bodyPart.Y {
 			return false
 		}
 	}
 
-	// Check for collision with other snakes
+	// Check collision with other snakes
 	for _, snake := range state.Board.Snakes {
 		for _, bodyPart := range snake.Body {
 			if pos.X == bodyPart.X && pos.Y == bodyPart.Y {
@@ -103,103 +85,157 @@ func isSafe(pos Coord, state GameState) bool {
 		}
 	}
 
+	// Check hazards
+	for _, hazard := range state.Board.Hazards {
+		if pos.X == hazard.X && pos.Y == hazard.Y {
+			// We'll allow hazards, but consider them less desirable
+			return true
+		}
+	}
+
 	return true
 }
 
-// getNextPosition calculates the next position given a move
-func getNextPosition(current Coord, move string) Coord {
-	switch move {
-	case "up":
-		return Coord{X: current.X, Y: current.Y + 1}
-	case "down":
-		return Coord{X: current.X, Y: current.Y - 1}
-	case "left":
-		return Coord{X: current.X - 1, Y: current.Y}
-	case "right":
-		return Coord{X: current.X + 1, Y: current.Y}
+func getBestMove(state GameState, possibleMoves []string) string {
+	type moveScore struct {
+		move  string
+		score float64
 	}
-	return current
+
+	var scoredMoves []moveScore
+
+	for _, move := range possibleMoves {
+		score := evaluateMove(state, move)
+		scoredMoves = append(scoredMoves, moveScore{move, score})
+	}
+
+	sort.Slice(scoredMoves, func(i, j int) bool {
+		return scoredMoves[i].score > scoredMoves[j].score
+	})
+
+	return scoredMoves[0].move
 }
 
-// scoreFood scores a move based on proximity to food
-func scoreFood(state GameState, move string) int {
-	nextPos := getNextPosition(state.You.Head, move)
-	closestFoodDist := math.MaxInt32
+func evaluateMove(state GameState, move string) float64 {
+	newHead := Coord{
+		X: state.You.Head.X + directions[move].X,
+		Y: state.You.Head.Y + directions[move].Y,
+	}
+
+	score := 0.0
+
+	// Survival score
+	score += 10.0
+
+	// Food seeking score
+	score += evaluateFoodScore(state, newHead)
+
+	// Space control score
+	score += evaluateSpaceControl(state, newHead)
+
+	// Squad awareness score
+	score += evaluateSquadAwareness(state, newHead)
+
+	// Health management score
+	score += evaluateHealthManagement(state)
+
+	// Opponent avoidance score
+	score += evaluateOpponentAvoidance(state, newHead)
+
+	return score
+}
+
+func evaluateFoodScore(state GameState, newHead Coord) float64 {
+	if state.You.Health > 50 {
+		return 0 // Don't prioritize food if health is high
+	}
+
+	minDistance := math.Inf(1)
 	for _, food := range state.Board.Food {
-		dist := manhattanDistance(nextPos, food)
-		if dist < closestFoodDist {
-			closestFoodDist = dist
+		distance := manhattanDistance(newHead, food)
+		if distance < minDistance {
+			minDistance = distance
 		}
 	}
-	// Prioritize food more when health is low
-	if state.You.Health < 25 {
-		return 100 - closestFoodDist
-	}
-	return 50 - closestFoodDist
+
+	return 5.0 / (minDistance + 1)
 }
 
-// scoreSpace scores a move based on the open space it leads to
-func scoreSpace(state GameState, move string) int {
-	nextPos := getNextPosition(state.You.Head, move)
-	space := floodFill(nextPos, state)
-	return space * 2
+func evaluateSpaceControl(state GameState, newHead Coord) float64 {
+	floodFillResult := floodFill(state, newHead)
+	return float64(floodFillResult) / float64(state.Board.Width*state.Board.Height) * 10
 }
 
-// scoreAggression scores a move based on aggressive potential
-func scoreAggression(state GameState, move string) int {
-	nextPos := getNextPosition(state.You.Head, move)
-	score := 0
+func evaluateSquadAwareness(state GameState, newHead Coord) float64 {
+	score := 0.0
 	for _, snake := range state.Board.Snakes {
-		if snake.ID == state.You.ID {
-			continue
-		}
-		if manhattanDistance(nextPos, snake.Head) == 1 && state.You.Length > snake.Length {
-			score += 50
+		if snake.ID != state.You.ID && isTeammate(state.You, snake) {
+			distance := manhattanDistance(newHead, snake.Head)
+			if distance < 2 {
+				score -= 5.0 // Avoid getting too close to teammates
+			}
 		}
 	}
 	return score
 }
 
-// scoreHazards scores a move based on proximity to hazards
-func scoreHazards(state GameState, move string) int {
-	nextPos := getNextPosition(state.You.Head, move)
-	for _, hazard := range state.Board.Hazards {
-		if nextPos.X == hazard.X && nextPos.Y == hazard.Y {
-			return 30
-		}
+func evaluateHealthManagement(state GameState) float64 {
+	if state.You.Health < 25 {
+		return 5.0 // Increase priority of food when health is low
 	}
 	return 0
 }
 
-// manhattanDistance calculates the Manhattan distance between two coordinates
-func manhattanDistance(a, b Coord) int {
-	return int(math.Abs(float64(a.X-b.X)) + math.Abs(float64(a.Y-b.Y)))
+func evaluateOpponentAvoidance(state GameState, newHead Coord) float64 {
+	score := 0.0
+	for _, snake := range state.Board.Snakes {
+		if snake.ID != state.You.ID && !isTeammate(state.You, snake) {
+			distance := manhattanDistance(newHead, snake.Head)
+			if distance == 0 {
+				score -= 100 // Heavily penalize head-on collisions
+			} else if distance == 1 {
+				if len(state.You.Body) <= len(snake.Body) {
+					score -= 50 // Penalize risky head-to-head standoffs
+				} else {
+					score += 10 // Reward potential eliminations
+				}
+			}
+		}
+	}
+	return score
 }
 
-// floodFill performs a flood fill to count accessible squares
-func floodFill(start Coord, state GameState) int {
-	visited := make(map[Coord]bool)
-	queue := []Coord{start}
-	count := 0
+func manhattanDistance(a, b Coord) float64 {
+	return math.Abs(float64(a.X-b.X)) + math.Abs(float64(a.Y-b.Y))
+}
 
-	for len(queue) > 0 {
-		current := queue[0]
-		queue = queue[1:]
+func floodFill(state GameState, start Coord) int {
+	visited := make(map[Coord]bool)
+	stack := []Coord{start}
+
+	for len(stack) > 0 {
+		current := stack[len(stack)-1]
+		stack = stack[:len(stack)-1]
 
 		if visited[current] {
 			continue
 		}
 
 		visited[current] = true
-		count++
 
-		for _, move := range moves {
-			next := getNextPosition(current, move)
-			if isSafe(next, state) && !visited[next] {
-				queue = append(queue, next)
+		for _, dir := range directions {
+			next := Coord{X: current.X + dir.X, Y: current.Y + dir.Y}
+			if isSafeMove(next, state) && !visited[next] {
+				stack = append(stack, next)
 			}
 		}
 	}
 
-	return count
+	return len(visited)
+}
+
+func isTeammate(snake1, snake2 Battlesnake) bool {
+	// In a real implementation, you'd need a way to identify teammates.
+	// For this example, we'll consider snakes with the same color as teammates.
+	return snake1.Customizations.Color == snake2.Customizations.Color
 }
