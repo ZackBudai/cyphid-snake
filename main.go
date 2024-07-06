@@ -85,14 +85,6 @@ func isSafeMove(pos Coord, state GameState) bool {
 		}
 	}
 
-	// Check hazards
-	for _, hazard := range state.Board.Hazards {
-		if pos.X == hazard.X && pos.Y == hazard.Y {
-			// We'll allow hazards, but consider them less desirable
-			return true
-		}
-	}
-
 	return true
 }
 
@@ -127,17 +119,16 @@ func evaluateMove(state GameState, move string) float64 {
 	// Survival score
 	score += 10.0
 
-	// Food seeking score
-	score += evaluateFoodScore(state, newHead)
+	// Food seeking score (now using a more nuanced health factor)
+	foodScore := evaluateFoodScore(state, newHead)
+	healthFactor := evaluateHealthManagement(state)
+	score += foodScore * healthFactor
 
 	// Space control score
 	score += evaluateSpaceControl(state, newHead)
 
 	// Squad awareness score
 	score += evaluateSquadAwareness(state, newHead)
-
-	// Health management score
-	score += evaluateHealthManagement(state)
 
 	// Opponent avoidance score
 	score += evaluateOpponentAvoidance(state, newHead)
@@ -146,19 +137,26 @@ func evaluateMove(state GameState, move string) float64 {
 }
 
 func evaluateFoodScore(state GameState, newHead Coord) float64 {
-	if state.You.Health > 50 {
-		return 0 // Don't prioritize food if health is high
-	}
+	totalScore := 0.0
+	maxDistance := float64(state.Board.Width + state.Board.Height) // Max possible distance on the board
 
-	minDistance := math.Inf(1)
 	for _, food := range state.Board.Food {
-		distance := manhattanDistance(newHead, food)
-		if distance < minDistance {
-			minDistance = distance
+		distance := pathDistance(state, newHead, food)
+		if distance == -1 {
+			continue // Skip unreachable food
 		}
+
+		// Score decreases as distance increases, but never reaches zero
+		// This ensures that distant food still contributes, but much less than nearby food
+		score := maxDistance / (float64(distance) + 1)
+		totalScore += score
 	}
 
-	return 5.0 / (minDistance + 1)
+	// Normalize the score based on the board size and number of food items
+	normalizedScore := totalScore / (float64(len(state.Board.Food)) * maxDistance)
+
+	// Scale the normalized score to a reasonable range (e.g., 0 to 10)
+	return normalizedScore * 10
 }
 
 func evaluateSpaceControl(state GameState, newHead Coord) float64 {
@@ -172,7 +170,7 @@ func evaluateSquadAwareness(state GameState, newHead Coord) float64 {
 		if snake.ID != state.You.ID && isTeammate(state.You, snake) {
 			distance := manhattanDistance(newHead, snake.Head)
 			if distance < 2 {
-				score -= 5.0 // Avoid getting too close to teammates
+				score -= 10.0 // Avoid getting too close to teammates
 			}
 		}
 	}
@@ -180,10 +178,20 @@ func evaluateSquadAwareness(state GameState, newHead Coord) float64 {
 }
 
 func evaluateHealthManagement(state GameState) float64 {
-	if state.You.Health < 25 {
-		return 5.0 // Increase priority of food when health is low
+	health := float64(state.You.Health)
+
+	// Base factor: ranges from 1.0 (at full health) to 2.0 (at 0 health)
+	baseFactor := 1.0 + (100.0 - health) / 100.0
+
+	// Urgency factor: increases rapidly at very low health
+	urgencyThreshold := 25.0
+	urgencyFactor := 1.0
+	if health < urgencyThreshold {
+		urgencyFactor = 1.0 + math.Pow((urgencyThreshold-health)/urgencyThreshold, 2)
 	}
-	return 0
+
+	// Combine base factor and urgency factor
+	return baseFactor * urgencyFactor
 }
 
 func evaluateOpponentAvoidance(state GameState, newHead Coord) float64 {
@@ -207,6 +215,40 @@ func evaluateOpponentAvoidance(state GameState, newHead Coord) float64 {
 
 func manhattanDistance(a, b Coord) float64 {
 	return math.Abs(float64(a.X-b.X)) + math.Abs(float64(a.Y-b.Y))
+}
+
+func pathDistance(state GameState, start, end Coord) int {
+	visited := make(map[Coord]bool)
+	queue := []struct {
+		pos   Coord
+		steps int
+	}{{pos: start, steps: 0}}
+
+	for len(queue) > 0 {
+		current := queue[0]
+		queue = queue[1:]
+
+		if current.pos == end {
+			return current.steps
+		}
+
+		if visited[current.pos] {
+			continue
+		}
+		visited[current.pos] = true
+
+		for _, dir := range directions {
+			next := Coord{X: current.pos.X + dir.X, Y: current.pos.Y + dir.Y}
+			if isSafeMove(next, state) && !visited[next] {
+				queue = append(queue, struct {
+					pos   Coord
+					steps int
+				}{pos: next, steps: current.steps + 1})
+			}
+		}
+	}
+
+	return -1 // No path found
 }
 
 func floodFill(state GameState, start Coord) int {
