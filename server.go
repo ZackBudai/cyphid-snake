@@ -28,14 +28,14 @@ func HandleIndex(w http.ResponseWriter, r *http.Request) {
 func HandleStart(w http.ResponseWriter, r *http.Request) {
 	enableCors(&w)
 
-	state := GameState{}
-	err := json.NewDecoder(r.Body).Decode(&state)
+	request := SnakeRequest{}
+	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		log.Printf("ERROR: Failed to decode start json, %s", err)
 		return
 	}
 
-	start(state)
+	start(request)
 
 	// Nothing to respond with here
 }
@@ -43,14 +43,14 @@ func HandleStart(w http.ResponseWriter, r *http.Request) {
 func HandleMove(w http.ResponseWriter, r *http.Request) {
 	enableCors(&w)
 
-	state := GameState{}
-	err := json.NewDecoder(r.Body).Decode(&state)
+	request := SnakeRequest{}
+	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		log.Printf("ERROR: Failed to decode move json, %s", err)
 		return
 	}
 
-	response := move(state)
+	response := move(request)
 
 	w.Header().Set("Content-Type", "application/json")
 	err = json.NewEncoder(w).Encode(response)
@@ -63,14 +63,14 @@ func HandleMove(w http.ResponseWriter, r *http.Request) {
 func HandleEnd(w http.ResponseWriter, r *http.Request) {
 	enableCors(&w)
 
-	state := GameState{}
-	err := json.NewDecoder(r.Body).Decode(&state)
+	request := SnakeRequest{}
+	err := json.NewDecoder(r.Body).Decode(&request)
 	if err != nil {
 		log.Printf("ERROR: Failed to decode end json, %s", err)
 		return
 	}
 
-	end(state)
+	end(request)
 
 	// Nothing to respond with here
 }
