@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/BattlesnakeOfficial/rules"
+	"github.com/BattlesnakeOfficial/rules/client"
 	"log"
 	"math/rand"
 	"strconv"
@@ -75,7 +76,7 @@ func move(request SnakeRequest) MoveResponse {
 	}
 }
 
-func isTeammate(snake1, snake2 Snake) bool {
+func isTeammate(snake1, snake2 client.Snake) bool {
 	// In a real implementation, you'd need a way to identify teammates.
 	// For this example, we'll consider snakes with the same color as teammates.
 	return snake1.Customizations.Color == snake2.Customizations.Color

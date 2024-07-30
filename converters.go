@@ -2,6 +2,7 @@ package main
 
 import (
 	"github.com/BattlesnakeOfficial/rules"
+	"github.com/BattlesnakeOfficial/rules/client"
 )
 
 func (request SnakeRequest) ConvertToBoardState() *rules.BoardState {
@@ -46,4 +47,30 @@ func (request SnakeRequest) ConvertToBoardState() *rules.BoardState {
 	}
 
 	return bs
+}
+
+// Point Converters
+func pointToCoord(point rules.Point) client.Coord {
+	return client.Coord{X: point.X, Y: point.Y}
+}
+
+func coordToPoint(coord client.Coord) rules.Point {
+	return rules.Point{X: coord.X, Y: coord.Y}
+}
+
+// Point slice Converters
+func pointsToCoords(points []rules.Point) []client.Coord {
+	coords := make([]client.Coord, len(points))
+	for i, point := range points {
+		coords[i] = pointToCoord(point)
+	}
+	return coords
+}
+
+func coordsToPoints(coords []client.Coord) []rules.Point {
+	points := make([]rules.Point, len(coords))
+	for i, coord := range coords {
+		points[i] = coordToPoint(coord)
+	}
+	return points
 }
