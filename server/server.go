@@ -1,6 +1,7 @@
-package main
+package server
 
 import (
+	"github.com/Battle-Bunker/cyphid-snake/agent"
 	"github.com/BattlesnakeOfficial/rules/client"
 	"encoding/json"
 	"log"
@@ -11,10 +12,10 @@ import (
 )
 
 type Server struct {
-	agent *SnakeAgent
+	agent *agent.SnakeAgent
 }
 
-func NewServer(agent *SnakeAgent) *Server {
+func NewServer(agent *agent.SnakeAgent) *Server {
 	return &Server{agent: agent}
 }
 
@@ -30,8 +31,6 @@ func withServerID(next http.HandlerFunc) http.HandlerFunc {
 }
 
 // Start Battlesnake Server
-
-
 func (s *Server) Start() {
 	port := os.Getenv("PORT")
 	if len(port) == 0 {
@@ -67,8 +66,8 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close() // Ensure the body is closed
 
-	var gameSnapshot GameSnapshot
-	if gameSnapshot = NewGameSnapshot(&request); gameSnapshot == nil {
+	var gameSnapshot agent.GameSnapshot
+	if gameSnapshot = agent.NewGameSnapshot(&request); gameSnapshot == nil {
 		log.Printf("Error creating game snapshot")
 				w.WriteHeader(http.StatusInternalServerError)
 				response := map[string]string{"error": "unable to create game snapshot"}
@@ -94,7 +93,7 @@ func (s *Server) handleEnd(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) { 
-	metadata := s.agent.metadata
+	metadata := s.agent.Metadata
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)

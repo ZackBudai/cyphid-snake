@@ -1,4 +1,4 @@
-module github.com/Battle-Bunker/Chris-Octopus-Snake-Python
+module github.com/Battle-Bunker/cyphid-snake
 
 go 1.18
 

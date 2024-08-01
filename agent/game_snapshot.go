@@ -1,9 +1,8 @@
-package main
+package agent
 
 import (
 	"github.com/BattlesnakeOfficial/rules"
 	"github.com/BattlesnakeOfficial/rules/client"
-
 	// "encoding/json"
 	"log"
 )
