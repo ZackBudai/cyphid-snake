@@ -5,7 +5,7 @@ import (
 	"github.com/BattlesnakeOfficial/rules/client"
 )
 
-func (request SnakeRequest) ConvertToBoardState() *rules.BoardState {
+func ConvertToBoardState(request client.SnakeRequest) *rules.BoardState {
 	// Create a new BoardState with the same dimensions as the GameState's Board
 	bs := rules.NewBoardState(request.Board.Width, request.Board.Height)
 

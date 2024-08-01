@@ -1,78 +1,21 @@
 package main
 
 import (
+	"github.com/BattlesnakeOfficial/rules/client"
 	"encoding/json"
 	"log"
 	"net/http"
+	// "io"
+	// "bytes"
 	"os"
 )
 
-func enableCors(w *http.ResponseWriter) {
-	(*w).Header().Set("Access-Control-Allow-Origin", "*")
+type Server struct {
+	agent *SnakeAgent
 }
 
-// HTTP Handlers
-
-func HandleIndex(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
-
-	response := info()
-
-	w.Header().Set("Content-Type", "application/json")
-	err := json.NewEncoder(w).Encode(response)
-	if err != nil {
-		log.Printf("ERROR: Failed to encode info response, %s", err)
-	}
-}
-
-func HandleStart(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
-
-	request := SnakeRequest{}
-	err := json.NewDecoder(r.Body).Decode(&request)
-	if err != nil {
-		log.Printf("ERROR: Failed to decode start json, %s", err)
-		return
-	}
-
-	start(request)
-
-	// Nothing to respond with here
-}
-
-func HandleMove(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
-
-	request := SnakeRequest{}
-	err := json.NewDecoder(r.Body).Decode(&request)
-	if err != nil {
-		log.Printf("ERROR: Failed to decode move json, %s", err)
-		return
-	}
-
-	response := move(request)
-
-	w.Header().Set("Content-Type", "application/json")
-	err = json.NewEncoder(w).Encode(response)
-	if err != nil {
-		log.Printf("ERROR: Failed to encode move response, %s", err)
-		return
-	}
-}
-
-func HandleEnd(w http.ResponseWriter, r *http.Request) {
-	enableCors(&w)
-
-	request := SnakeRequest{}
-	err := json.NewDecoder(r.Body).Decode(&request)
-	if err != nil {
-		log.Printf("ERROR: Failed to decode end json, %s", err)
-		return
-	}
-
-	end(request)
-
-	// Nothing to respond with here
+func NewServer(agent *SnakeAgent) *Server {
+	return &Server{agent: agent}
 }
 
 // Middleware
@@ -88,17 +31,75 @@ func withServerID(next http.HandlerFunc) http.HandlerFunc {
 
 // Start Battlesnake Server
 
-func RunServer() {
+
+func (s *Server) Start() {
 	port := os.Getenv("PORT")
 	if len(port) == 0 {
 		port = "8000"
 	}
 
-	http.HandleFunc("/", withServerID(HandleIndex))
-	http.HandleFunc("/start", withServerID(HandleStart))
-	http.HandleFunc("/move", withServerID(HandleMove))
-	http.HandleFunc("/end", withServerID(HandleEnd))
+	http.HandleFunc("/", withServerID(s.handleIndex))
+	http.HandleFunc("/start", withServerID(s.handleStart))
+	http.HandleFunc("/move", withServerID(s.handleMove))
+	http.HandleFunc("/end", withServerID(s.handleEnd))
 
 	log.Printf("Running Battlesnake at http://0.0.0.0:%s...\n", port)
 	log.Fatal(http.ListenAndServe(":"+port, nil))
+}
+
+
+func (s *Server) handleStart(w http.ResponseWriter, r *http.Request) {
+	log.Println("START")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
+	// log.Println("Received move request")
+
+	var request client.SnakeRequest
+	
+	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
+		log.Printf("Error decoding move request: %v", err)
+				w.WriteHeader(http.StatusBadRequest)
+				response := map[string]string{"error": "unable to decode request"}
+				json.NewEncoder(w).Encode(response)
+		return
+	}
+	defer r.Body.Close() // Ensure the body is closed
+
+	var gameSnapshot GameSnapshot
+	if gameSnapshot = NewGameSnapshot(&request); gameSnapshot == nil {
+		log.Printf("Error creating game snapshot")
+				w.WriteHeader(http.StatusInternalServerError)
+				response := map[string]string{"error": "unable to create game snapshot"}
+				json.NewEncoder(w).Encode(response)
+		return
+	}
+
+	moveResponse := s.agent.ChooseMove(gameSnapshot)
+	log.Printf("Move: %s, Shout: %s", moveResponse.Move, moveResponse.Shout)
+
+	
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(moveResponse); err != nil {
+				log.Printf("Error encoding move response: %v", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+		}
+}
+
+func (s *Server) handleEnd(w http.ResponseWriter, r *http.Request) {
+	log.Println("END")
+	w.WriteHeader(http.StatusOK)
+}
+
+func (s *Server) handleIndex(w http.ResponseWriter, r *http.Request) { 
+	metadata := s.agent.metadata
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(metadata); err != nil {
+		log.Printf("Error encoding info response: %v", err)
+		w.WriteHeader(http.StatusInternalServerError)
+	}
 }
