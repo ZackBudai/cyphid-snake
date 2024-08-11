@@ -3,7 +3,9 @@ package agent
 import (
 	"github.com/Battle-Bunker/cyphid-snake/lib"
 	"github.com/BattlesnakeOfficial/rules"
-  "github.com/BattlesnakeOfficial/rules/client"
+	"github.com/BattlesnakeOfficial/rules/client"
+	// "github.com/samber/mo"
+	// "github.com/samber/lo"
 	"log"
 	"math"
 )
@@ -22,9 +24,12 @@ func NewSnakeAgent(portfolio Portfolio, metadata client.SnakeMetadataResponse) *
 }
 
 func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
-	forwardMoves := snapshot.You().ForwardMoves()
+	you := snapshot.You()
+	forwardMoves := you.ForwardMoves()
 	scores := make([]float64, len(forwardMoves))
 
+	log.Printf("Turn: %d, my (%s) forward moves: %s", snapshot.Turn(), you.ID(), snakeMovesToStrings(forwardMoves))
+	
 	for i, move := range forwardMoves {
 		nextStates := sa.generateNextStates(snapshot, move.Move)
 		if len(nextStates) == 0 {
@@ -36,7 +41,7 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 			marginalScore := sa.calculateMarginalScore(heuristic.Heuristic, nextStates)
 
 			// Debug: Print Turn() index and marginalScore
-			log.Printf("Turn: %d, Marginal Score: %f", snapshot.Turn(), marginalScore)
+			log.Printf("Turn %d: %s - Heuristic '%s' Marginal Score: %f", snapshot.Turn(), move.Move, heuristic.Name, marginalScore)
 			scores[i] += marginalScore * heuristic.Weight
 		}
 	}
@@ -118,7 +123,11 @@ func generateMoveCombinations(snakes []SnakeSnapshot, excludeID string) []map[st
 			buildCombinations(index+1, currentCombination)
 			return
 		}
-		for _, move := range snake.ForwardMoves() {
+		
+		forwardMoves := snake.ForwardMoves()
+		log.Printf("Snake %s Forward Moves: %+v", snake.ID(), snakeMovesToStrings(forwardMoves))
+		
+		for _, move := range forwardMoves {
 			currentCombination[snake.ID()] = move
 			buildCombinations(index+1, currentCombination)
 		}

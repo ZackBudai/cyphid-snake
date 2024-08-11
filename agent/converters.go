@@ -74,3 +74,12 @@ func coordsToPoints(coords []client.Coord) []rules.Point {
 	}
 	return points
 }
+
+// Convert an array of rules.SnakeMove to an array of move strings
+func snakeMovesToStrings(snakeMoves []rules.SnakeMove) []string {
+	moveStrings := make([]string, len(snakeMoves))
+	for i, move := range snakeMoves {
+		moveStrings[i] = move.Move
+	}
+	return moveStrings
+}
