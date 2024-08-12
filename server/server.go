@@ -59,9 +59,9 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
 		log.Printf("Error decoding move request: %v", err)
-				w.WriteHeader(http.StatusBadRequest)
-				response := map[string]string{"error": "unable to decode request"}
-				json.NewEncoder(w).Encode(response)
+		w.WriteHeader(http.StatusBadRequest)
+		response := map[string]string{"error": "unable to decode request"}
+		json.NewEncoder(w).Encode(response)
 		return
 	}
 	defer r.Body.Close() // Ensure the body is closed
@@ -76,8 +76,7 @@ func (s *Server) handleMove(w http.ResponseWriter, r *http.Request) {
 	}
 
 	moveResponse := s.agent.ChooseMove(gameSnapshot)
-	log.Printf("Move: %s, Shout: %s", moveResponse.Move, moveResponse.Shout)
-
+	log.Printf("Turn %d: Move %s, Shout '%s'", request.Turn, moveResponse.Move, moveResponse.Shout)
 	
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(moveResponse); err != nil {

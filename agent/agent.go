@@ -28,8 +28,6 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 	forwardMoves := you.ForwardMoves()
 	scores := make([]float64, len(forwardMoves))
 
-	log.Printf("Turn: %d, my (%s) forward moves: %s", snapshot.Turn(), you.ID(), snakeMovesToStrings(forwardMoves))
-	
 	for i, move := range forwardMoves {
 		nextStates := sa.generateNextStates(snapshot, move.Move)
 		if len(nextStates) == 0 {
@@ -41,7 +39,7 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 			marginalScore := sa.calculateMarginalScore(heuristic.Heuristic, nextStates)
 
 			// Debug: Print Turn() index and marginalScore
-			log.Printf("Turn %d: %s - Heuristic '%s' Marginal Score: %f", snapshot.Turn(), move.Move, heuristic.Name, marginalScore)
+			log.Printf("Considering %s: Heuristic '%s' Marginal Score: %f", move.Move, heuristic.Name, marginalScore)
 			scores[i] += marginalScore * heuristic.Weight
 		}
 	}
@@ -68,13 +66,11 @@ func getMoveComboList(moveCombinations []map[string]rules.SnakeMove) [][]string 
 func (sa *SnakeAgent) generateNextStates(snapshot GameSnapshot, move string) []GameSnapshot {
 	var nextStates []GameSnapshot
 	yourID := snapshot.You().ID()
-	// Debugging info
-	// log.Println("Starting generateNextStates")
 
 	// Generate all possible move combinations for other snakes
 	moveCombinations := generateMoveCombinations(snapshot.Snakes(), yourID)
 
-	log.Printf("Trying move %s, combinations: %v", move, getMoveComboList(moveCombinations))
+	// log.Printf("Trying move %s, combinations: %v", move, getMoveComboList(moveCombinations))
 
 	for _, combination := range moveCombinations {
 		combination[yourID] = rules.SnakeMove{ID: yourID, Move: move}
@@ -83,17 +79,15 @@ func (sa *SnakeAgent) generateNextStates(snapshot GameSnapshot, move string) []G
 		for _, m := range combination {
 			moveSlice = append(moveSlice, m)
 		}
-		// log.Printf("Move slice: %+v", moveSlice)
-		// Debugging: Check before ApplyMoves call
+
 		if snapshot == nil {
-			log.Println("Snapshot is nil before applying moves")
+			log.Fatalf("Snapshot is nil before applying moves")
 		}
 		nextState, err := snapshot.ApplyMoves(moveSlice)
 
-		// Debug the state after ApplyMoves call
 		if err != nil {
-			log.Printf("Error applying moves: %v", err)
-		} else {
+			log.Fatalf("Error applying moves: %v", err)
+		} else { // Debug the state after ApplyMoves call
 			// log.Printf("Next state after applying move: %+v", nextState)
 		}
 		if nextState != nil {
@@ -107,6 +101,7 @@ func (sa *SnakeAgent) generateNextStates(snapshot GameSnapshot, move string) []G
 func generateMoveCombinations(snakes []SnakeSnapshot, excludeID string) []map[string]rules.SnakeMove {
 
 	var combinations []map[string]rules.SnakeMove
+	
 	// Helper function to recursively build the move combinations
 	var buildCombinations func(int, map[string]rules.SnakeMove)
 	buildCombinations = func(index int, currentCombination map[string]rules.SnakeMove) {
@@ -124,9 +119,7 @@ func generateMoveCombinations(snakes []SnakeSnapshot, excludeID string) []map[st
 			return
 		}
 		
-		forwardMoves := snake.ForwardMoves()
-		log.Printf("Snake %s Forward Moves: %+v", snake.ID(), snakeMovesToStrings(forwardMoves))
-		
+		forwardMoves := snake.ForwardMoves()	
 		for _, move := range forwardMoves {
 			currentCombination[snake.ID()] = move
 			buildCombinations(index+1, currentCombination)
