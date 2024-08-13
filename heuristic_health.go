@@ -2,20 +2,43 @@ package main
 
 import (
 	"github.com/Battle-Bunker/cyphid-snake/agent"
-	// "fmt"
-	// "log"
 )
+
+/*
+type GameSnapshot interface {
+	GameID() string
+	Rules() rules.Ruleset
+	Turn() int
+	Height() int
+	Width() int
+	Food() []rules.Point
+	Hazards() []rules.Point
+	Snakes() []SnakeSnapshot
+	You() SnakeSnapshot
+	Teammates() []SnakeSnapshot
+	YourTeam() []SnakeSnapshot
+	Opponents() []SnakeSnapshot
+	ApplyMoves(moves []rules.SnakeMove) (GameSnapshot, error)
+}
+
+type SnakeSnapshot interface {
+	ID() string
+	Name() string
+	Health() int
+	Body() []rules.Point
+	Head() rules.Point
+	Length() int
+	LastShout() string
+	ForwardMoves() []rules.SnakeMove
+}
+*/
 
 // heuristicHealth calculates the sum of health for all snakes in your team,
 // including the player's snake.
-// Calculates all of the health of all the agents in your team and returns it as an integer. (written by jacob)
 func HeuristicHealth(snapshot agent.GameSnapshot) int {
 	totalHealth := 0
-	// allSnakeStats := ""
 	for _, allySnake := range snapshot.YourTeam() {
 		totalHealth += allySnake.Health()
-		// allSnakeStats += fmt.Sprintf("[ID: %s, Health: %d] ", allySnake.ID(), allySnake.Health())
 	}
-	// log.Printf("Turn %d - Allies [ID, Health]*: %s\n", snapshot.Turn(), allSnakeStats)
 	return totalHealth
 }
