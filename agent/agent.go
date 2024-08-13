@@ -39,7 +39,7 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 			marginalScore := sa.calculateMarginalScore(heuristic.Heuristic, nextStates)
 
 			// Debug: Print Turn() index and marginalScore
-			log.Printf("Considering %s: Heuristic '%s' Marginal Score: %f", move.Move, heuristic.Name, marginalScore)
+			log.Printf("Considering %4s: Heuristic '%25s' Marginal Score: %f", move.Move, heuristic.Name, marginalScore)
 			scores[i] += marginalScore * heuristic.Weight
 		}
 	}
