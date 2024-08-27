@@ -17,11 +17,13 @@ type GameSnapshot interface {
 	Width() int
 	Food() []rules.Point
 	Hazards() []rules.Point
-	Snakes() []SnakeSnapshot
 	You() SnakeSnapshot
+	Snakes() []SnakeSnapshot
 	Teammates() []SnakeSnapshot
 	YourTeam() []SnakeSnapshot
 	Opponents() []SnakeSnapshot
+	AllSnakes() []SnakeSnapshot
+	DeadSnakes() []SnakeSnapshot
 	ApplyMoves(moves []rules.SnakeMove) (GameSnapshot, error)
 }
 
@@ -61,13 +63,25 @@ func (g *gameSnapshotImpl) Hazards() []rules.Point {
 	return g.boardState.Hazards
 }
 
-func (g *gameSnapshotImpl) Snakes() []SnakeSnapshot {
+func (g *gameSnapshotImpl) AllSnakes() []SnakeSnapshot {
 	return lo.Map(g.boardState.Snakes, func(snake rules.Snake, _ int) SnakeSnapshot {
 		snakeStat := g.snakeStats[snake.ID]
 		return &snakeSnapshotImpl{
 			stats: snakeStat,
 			snake: &snake,
 		}
+	})
+}
+
+func (g *gameSnapshotImpl) DeadSnakes() []SnakeSnapshot {
+	return lo.Filter(g.AllSnakes(), func(s SnakeSnapshot, _ int) bool {
+		return !s.Alive()
+	})
+}
+
+func (g *gameSnapshotImpl) Snakes() []SnakeSnapshot {
+	return lo.Filter(g.AllSnakes(), func(s SnakeSnapshot, _ int) bool {
+		return s.Alive()
 	})
 }
 
@@ -103,20 +117,23 @@ func (g *gameSnapshotImpl) Teammates() []SnakeSnapshot {
 		return id == g.yourID
 	})
 
-	return lo.Map(teammateIds, func(id string, _ int) SnakeSnapshot {
-		return g.getSnakeById(id)
+	return lo.FilterMap(teammateIds, func(id string, _ int) (SnakeSnapshot, bool) {
+		snakeSnapshot := g.getSnakeById(id)
+		return snakeSnapshot, snakeSnapshot.Alive()
 	})
 }
 
 func (g *gameSnapshotImpl) YourTeam() []SnakeSnapshot {
-	return lo.Map(g.allyIDs, func(id string, _ int) SnakeSnapshot {
-		return g.getSnakeById(id)
+	return lo.FilterMap(g.allyIDs, func(id string, _ int) (SnakeSnapshot, bool) {
+		snakeSnapshot := g.getSnakeById(id)
+		return snakeSnapshot, snakeSnapshot.Alive()
 	})
 }
 
 func (g *gameSnapshotImpl) Opponents() []SnakeSnapshot {
-	return lo.Map(g.opponentIDs, func(id string, _ int) SnakeSnapshot {
-		return g.getSnakeById(id)
+	return lo.FilterMap(g.opponentIDs, func(id string, _ int) (SnakeSnapshot, bool) {
+		snakeSnapshot := g.getSnakeById(id)
+		return snakeSnapshot, snakeSnapshot.Alive()
 	})
 }
 
@@ -151,8 +168,7 @@ func NewGameSnapshot(request *client.SnakeRequest) GameSnapshot {
 
 	rulesetName := request.Game.Ruleset.Name
 	// log.Println("Creating game snapshot for ruleset:", rulesetName)
-	
-	
+
 	ruleset := rules.NewRulesetBuilder().
 		WithParams(ConvertRulesetSettingsToMap(request.Game.Ruleset.Settings)).
 		WithSolo(len(request.Board.Snakes) < 2).

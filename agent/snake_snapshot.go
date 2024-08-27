@@ -10,6 +10,7 @@ import (
 type SnakeSnapshot interface {
 	ID() string
 	Name() string
+	Alive() bool
 	Health() int
 	Body() []rules.Point
 	Head() rules.Point
@@ -38,8 +39,12 @@ func (s *snakeSnapshotImpl) Name() string {
 	return s.stats.name
 }
 
+func (s *snakeSnapshotImpl) Alive() bool {
+	return s.snake.EliminatedCause == rules.NotEliminated
+}
+
 func (s *snakeSnapshotImpl) Health() int {
-	if s.snake.EliminatedCause != rules.NotEliminated {
+	if !s.Alive() {
 		return 0
 	} else {
 		return s.snake.Health
