@@ -1,40 +1,43 @@
 package lib
 
 import (
+	"github.com/samber/lo"
 	"math"
 	"math/rand"
 )
 
-func Softmax(inputs []float64) []float64 {
-	var max float64 = inputs[0]
-	for _, v := range inputs[1:] {
-		if v > max {
-			max = v
-		}
-	}
+func SoftmaxWithTemp(inputs []float64, temp float64) []float64 {
+	max := lo.Max(inputs)
 
-	exps := make([]float64, len(inputs))
-	var sum float64
-	for i, v := range inputs {
-		exps[i] = math.Exp(v - max)
-		sum += exps[i]
-	}
+	exps := lo.Map(inputs, func(v float64, _ int) float64 {
+		return math.Exp((v - max) / temp)
+	})
+	sum := lo.Sum(exps)
 
-	for i := range exps {
-		exps[i] /= sum
-	}
+	exps = lo.Map(exps, func(v float64, _ int) float64 {
+		return v / sum
+	})
+
 	return exps
 }
 
-func SoftmaxSample(inputs []float64) int {
-	probs := Softmax(inputs)
-	r := rand.Float64()
-	var cumulativeProb float64
-	for i, prob := range probs {
-		cumulativeProb += prob
-		if r <= cumulativeProb {
-			return i
+func Softmax(inputs []float64) []float64 {
+	return SoftmaxWithTemp(inputs, 1.0)
+}
+
+func SampleFromWeights(weights []float64) int {
+		r := rand.Float64()
+		var cumulativeProb float64
+		for i, weight := range weights {
+			cumulativeProb += weight
+			if r <= cumulativeProb {
+				return i
+			}
 		}
-	}
-	return len(inputs) - 1
+		return len(weights) - 1
+}
+
+func SoftmaxSample(inputs []float64) int {
+		probs := Softmax(inputs)
+		return SampleFromWeights(probs)
 }

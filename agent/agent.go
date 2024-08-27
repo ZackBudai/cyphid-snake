@@ -4,10 +4,15 @@ import (
 	"github.com/Battle-Bunker/cyphid-snake/lib"
 	"github.com/BattlesnakeOfficial/rules"
 	"github.com/BattlesnakeOfficial/rules/client"
+
 	// "github.com/samber/mo"
-	"github.com/samber/lo"
+	"fmt"
 	"log"
 	"math"
+	"slices"
+	"strings"
+
+	"github.com/samber/lo"
 )
 
 // Update the SnakeAgent structure to include SnakeMetadataResponse
@@ -27,48 +32,68 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 	you := snapshot.You()
 	forwardMoves := you.ForwardMoves()
 
+	forwardMoveStrs := lo.Map(forwardMoves, func(move rules.SnakeMove, _ int) string { return move.Move })
+	slices.Sort(forwardMoveStrs)
+	log.Printf("\n\n ### Start Turn %d: Forward Moves = %v", snapshot.Turn(), forwardMoveStrs)
+
 	// map: move -> set(state snapshots)
 	nextStatesMap := make(map[string][]GameSnapshot)
-	for _, move := range forwardMoves {
-		nextStatesMap[move.Move] = sa.generateNextStates(snapshot, move.Move)
+	for _, move := range forwardMoveStrs {
+		nextStatesMap[move] = sa.generateNextStates(snapshot, move)
 	}
 
 	// slice of maps, for each heuristic, giving mapping: move -> aggScore
-	heuristicScores := lo.Map(sa.Portfolio, func(heuristic weightedHeuristic, _ int) map[string]float64 {
-		return sa.weightedMarginalScoresForHeuristic(heuristic, nextStatesMap)
+	heuristicScores := lo.Map(sa.Portfolio, func(heuristic WeightedHeuristic, _ int) map[string]float64 {
+		return sa.weightedMarginalScoresForHeuristic(heuristic, nextStatesMap, forwardMoveStrs)
 	})
 
-		// slice of scores aligned with forwardMoves
-	marginalScores := lo.Map(forwardMoves, func(move rules.SnakeMove, _ int) float64 {
+	// slice of scores aligned with forwardMoveStrs
+	marginalScores := lo.Map(forwardMoveStrs, func(move string, _ int) float64 {
 		return lo.SumBy(heuristicScores, func(scores map[string]float64) float64 {
-				return scores[move.Move]
-			})
+			return scores[move]
 		})
-	
-	chosenMove := forwardMoves[lib.SoftmaxSample(marginalScores)]
+	})
+
+	probs := lib.SoftmaxWithTemp(marginalScores, 10.0)
+
+	log.Printf("###       Aggregate move weights: %s", strings.Join(lo.Map(forwardMoveStrs, func(move string, i int) string {
+		return fmt.Sprintf("%s=%5.1f", move, marginalScores[i])
+	}), ", "))
+	log.Printf("### Aggregate move probabilities: %s", strings.Join(lo.Map(forwardMoveStrs, func(move string, i int) string {
+		return fmt.Sprintf("%s=%4.1f%%", move, probs[i]*100)
+	}), ", "))
+
+	chosenMove := forwardMoveStrs[lib.SampleFromWeights(probs)]
+
 	return client.MoveResponse{
-		Move:  chosenMove.Move,
-		Shout: "I'm moving " + chosenMove.Move,
+		Move:  chosenMove,
+		Shout: "I'm moving " + chosenMove,
 	}
 }
 
-func (sa *SnakeAgent) weightedMarginalScoresForHeuristic(heuristic weightedHeuristic, nextStatesMap map[string][]GameSnapshot) map[string]float64 {
+func (sa *SnakeAgent) weightedMarginalScoresForHeuristic(heuristic WeightedHeuristic, nextStatesMap map[string][]GameSnapshot, forwardMoveStrs []string) map[string]float64 {
 	moveScores := make(map[string]float64)
 	for move, states := range nextStatesMap {
-		moveScores[move] = lo.MeanBy(states, heuristic.F)
+		moveScores[move] = lo.MeanBy(states, heuristic.F())
 	}
 
-	log.Printf("            MoveScores for %15s: %+v", heuristic.Name, moveScores)
+	log.Printf("%22s for %25s: %s", "MoveScores", heuristic.Name(), strings.Join(lo.Map(forwardMoveStrs, func(move string, _ int) string {
+		return fmt.Sprintf("%s=%5.1f", move, moveScores[move])
+	}), ", "))
+	
 	meanScore := lo.Mean(lo.Values(moveScores))
 	weightedMarginalScores := make(map[string]float64)
 	for move, score := range moveScores {
-		weightedMarginalScores[move] = heuristic.Weight * (score - meanScore)
+		weightedMarginalScores[move] = heuristic.Weight() * (score - meanScore)
 	}
 
 	roundedWMScores := lo.MapValues(weightedMarginalScores, func(score float64, _ string) float64 {
-		return math.Round(score * 100) / 100
+		return math.Round(score*100) / 100
 	})
-	log.Printf("WeightedMarginalScores for %15s: %+v", heuristic.Name, roundedWMScores)
+	log.Printf("%22s for %25s: %+v", "WeightedMarginalScores", heuristic.NameAndWeight(), strings.Join(lo.Map(forwardMoveStrs, func(move string, _ int) string {
+		return fmt.Sprintf("%s=%5.1f", move, roundedWMScores[move])
+	}), ", "))
+	
 	return weightedMarginalScores
 }
 
