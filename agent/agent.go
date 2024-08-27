@@ -33,19 +33,18 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 		nextStatesMap[move.Move] = sa.generateNextStates(snapshot, move.Move)
 	}
 
-	// map: move -> aggScore
-	aggMoveScores := make(map[string]float64)
-	for _, heuristic := range sa.Portfolio {
-		marginalScores := sa.marginalScoresForHeuristic(heuristic, nextStatesMap)
-		for move, score := range marginalScores {
-			aggMoveScores[move] += score * heuristic.Weight
-		}
-	}
-	// slice of scores aligned with forwardMoves
-	marginalScores := lo.Map(forwardMoves, func(move rules.SnakeMove, _ int) float64 {
-		return aggMoveScores[move.Move]
+	// slice of maps, for each heuristic, giving mapping: move -> aggScore
+	heuristicScores := lo.Map(sa.Portfolio, func(heuristic weightedHeuristic, _ int) map[string]float64 {
+		return sa.weightedMarginalScoresForHeuristic(heuristic, nextStatesMap)
 	})
 
+		// slice of scores aligned with forwardMoves
+	marginalScores := lo.Map(forwardMoves, func(move rules.SnakeMove, _ int) float64 {
+		return lo.SumBy(heuristicScores, func(scores map[string]float64) float64 {
+				return scores[move.Move]
+			})
+		})
+	
 	chosenMove := forwardMoves[lib.SoftmaxSample(marginalScores)]
 	return client.MoveResponse{
 		Move:  chosenMove.Move,
@@ -53,24 +52,24 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 	}
 }
 
-func (sa *SnakeAgent) marginalScoresForHeuristic(heuristic weightedHeuristic, nextStatesMap map[string][]GameSnapshot) map[string]float64 {
+func (sa *SnakeAgent) weightedMarginalScoresForHeuristic(heuristic weightedHeuristic, nextStatesMap map[string][]GameSnapshot) map[string]float64 {
 	moveScores := make(map[string]float64)
 	for move, states := range nextStatesMap {
 		moveScores[move] = lo.MeanBy(states, heuristic.F)
 	}
 
-	log.Printf("    MoveScores for %15s: %+v", heuristic.Name, moveScores)
+	log.Printf("            MoveScores for %15s: %+v", heuristic.Name, moveScores)
 	meanScore := lo.Mean(lo.Values(moveScores))
-	marginalScores := make(map[string]float64)
+	weightedMarginalScores := make(map[string]float64)
 	for move, score := range moveScores {
-		marginalScores[move] = score - meanScore
+		weightedMarginalScores[move] = heuristic.Weight * (score - meanScore)
 	}
 
-	roundedMarginalScores := lo.MapValues(marginalScores, func(score float64, _ string) float64 {
-		return math.Round(score*100) / 100
+	roundedWMScores := lo.MapValues(weightedMarginalScores, func(score float64, _ string) float64 {
+		return math.Round(score * 100) / 100
 	})
-	log.Printf("MarginalScores for %15s: %+v", heuristic.Name, roundedMarginalScores)
-	return marginalScores
+	log.Printf("WeightedMarginalScores for %15s: %+v", heuristic.Name, roundedWMScores)
+	return weightedMarginalScores
 }
 
 func (sa *SnakeAgent) generateNextStates(snapshot GameSnapshot, move string) []GameSnapshot {
