@@ -39,8 +39,7 @@ func (s *snakeSnapshotImpl) Name() string {
 }
 
 func (s *snakeSnapshotImpl) Health() int {
-	if s.snake.EliminatedCause != "" {
-		// log.Printf("EliminatedCause: %s", s.newSnake.EliminatedCause)
+	if s.snake.EliminatedCause != rules.NotEliminated {
 		return 0
 	} else {
 		return s.snake.Health

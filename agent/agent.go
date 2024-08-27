@@ -5,18 +5,18 @@ import (
 	"github.com/BattlesnakeOfficial/rules"
 	"github.com/BattlesnakeOfficial/rules/client"
 	// "github.com/samber/mo"
-	// "github.com/samber/lo"
+	"github.com/samber/lo"
 	"log"
 	"math"
 )
 
 // Update the SnakeAgent structure to include SnakeMetadataResponse
 type SnakeAgent struct {
-	Portfolio Portfolio
+	Portfolio HeuristicPortfolio
 	Metadata  client.SnakeMetadataResponse
 }
 
-func NewSnakeAgent(portfolio Portfolio, metadata client.SnakeMetadataResponse) *SnakeAgent {
+func NewSnakeAgent(portfolio HeuristicPortfolio, metadata client.SnakeMetadataResponse) *SnakeAgent {
 	return &SnakeAgent{
 		Portfolio: portfolio,
 		Metadata:  metadata,
@@ -26,41 +26,51 @@ func NewSnakeAgent(portfolio Portfolio, metadata client.SnakeMetadataResponse) *
 func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 	you := snapshot.You()
 	forwardMoves := you.ForwardMoves()
-	scores := make([]float64, len(forwardMoves))
 
-	for i, move := range forwardMoves {
-		nextStates := sa.generateNextStates(snapshot, move.Move)
-		if len(nextStates) == 0 {
-			scores[i] = math.Inf(-1)
-			continue
-		}
-
-		for _, heuristic := range sa.Portfolio {
-			marginalScore := sa.calculateMarginalScore(heuristic.Heuristic, nextStates)
-
-			// Debug: Print Turn() index and marginalScore
-			log.Printf("Considering %4s: Heuristic '%25s' Marginal Score: %f", move.Move, heuristic.Name, marginalScore)
-			scores[i] += marginalScore * heuristic.Weight
-		}
+	// map: move -> set(state snapshots)
+	nextStatesMap := make(map[string][]GameSnapshot)
+	for _, move := range forwardMoves {
+		nextStatesMap[move.Move] = sa.generateNextStates(snapshot, move.Move)
 	}
 
-	chosenMove := forwardMoves[lib.SoftmaxSample(scores)]
+	// map: move -> aggScore
+	aggMoveScores := make(map[string]float64)
+	for _, heuristic := range sa.Portfolio {
+		marginalScores := sa.marginalScoresForHeuristic(heuristic, nextStatesMap)
+		for move, score := range marginalScores {
+			aggMoveScores[move] += score * heuristic.Weight
+		}
+	}
+	// slice of scores aligned with forwardMoves
+	marginalScores := lo.Map(forwardMoves, func(move rules.SnakeMove, _ int) float64 {
+		return aggMoveScores[move.Move]
+	})
+
+	chosenMove := forwardMoves[lib.SoftmaxSample(marginalScores)]
 	return client.MoveResponse{
 		Move:  chosenMove.Move,
 		Shout: "I'm moving " + chosenMove.Move,
 	}
 }
 
-func getMoveComboList(moveCombinations []map[string]rules.SnakeMove) [][]string {
-	var result [][]string
-	for _, combo := range moveCombinations {
-		var moves []string
-		for _, snakeMove := range combo {
-			moves = append(moves, snakeMove.Move)
-		}
-		result = append(result, moves)
+func (sa *SnakeAgent) marginalScoresForHeuristic(heuristic weightedHeuristic, nextStatesMap map[string][]GameSnapshot) map[string]float64 {
+	moveScores := make(map[string]float64)
+	for move, states := range nextStatesMap {
+		moveScores[move] = lo.MeanBy(states, heuristic.F)
 	}
-	return result
+
+	log.Printf("    MoveScores for %15s: %+v", heuristic.Name, moveScores)
+	meanScore := lo.Mean(lo.Values(moveScores))
+	marginalScores := make(map[string]float64)
+	for move, score := range moveScores {
+		marginalScores[move] = score - meanScore
+	}
+
+	roundedMarginalScores := lo.MapValues(marginalScores, func(score float64, _ string) float64 {
+		return math.Round(score*100) / 100
+	})
+	log.Printf("MarginalScores for %15s: %+v", heuristic.Name, roundedMarginalScores)
+	return marginalScores
 }
 
 func (sa *SnakeAgent) generateNextStates(snapshot GameSnapshot, move string) []GameSnapshot {
@@ -68,12 +78,12 @@ func (sa *SnakeAgent) generateNextStates(snapshot GameSnapshot, move string) []G
 	yourID := snapshot.You().ID()
 
 	// Generate all possible move combinations for other snakes
-	moveCombinations := generateMoveCombinations(snapshot.Snakes(), yourID)
+	presetMoves := map[string]rules.SnakeMove{yourID: {ID: yourID, Move: move}}
+	moveCombinations := generateForwardMoveCombinations(snapshot.Snakes(), presetMoves)
 
 	// log.Printf("Trying move %s, combinations: %v", move, getMoveComboList(moveCombinations))
 
 	for _, combination := range moveCombinations {
-		combination[yourID] = rules.SnakeMove{ID: yourID, Move: move}
 		// Convert the combination map to a slice
 		var moveSlice []rules.SnakeMove
 		for _, m := range combination {
@@ -95,47 +105,50 @@ func (sa *SnakeAgent) generateNextStates(snapshot GameSnapshot, move string) []G
 		}
 	}
 	// log.Printf("Generated next states: %+v", nextStates)
+
 	return nextStates
 }
 
-func generateMoveCombinations(snakes []SnakeSnapshot, excludeID string) []map[string]rules.SnakeMove {
+func generateForwardMoveCombinations(snakes []SnakeSnapshot, presetMoves map[string]rules.SnakeMove) []map[string]rules.SnakeMove {
+	presetSnakeIDs := lo.Keys(presetMoves)
 
-	var combinations []map[string]rules.SnakeMove
-	
-	// Helper function to recursively build the move combinations
-	var buildCombinations func(int, map[string]rules.SnakeMove)
-	buildCombinations = func(index int, currentCombination map[string]rules.SnakeMove) {
-		if index == len(snakes) {
-			combinationCopy := make(map[string]rules.SnakeMove)
-			for k, v := range currentCombination {
-				combinationCopy[k] = v
-			}
-			combinations = append(combinations, combinationCopy)
-			return
-		}
-		snake := snakes[index]
-		if snake.ID() == excludeID {
-			buildCombinations(index+1, currentCombination)
-			return
-		}
-		
-		forwardMoves := snake.ForwardMoves()	
-		for _, move := range forwardMoves {
-			currentCombination[snake.ID()] = move
-			buildCombinations(index+1, currentCombination)
-		}
+	nonPresetSnakes := lo.Filter(snakes, func(snake SnakeSnapshot, _ int) bool {
+		return !lo.Contains(presetSnakeIDs, snake.ID())
+	})
+
+	// If there are no non-preset snakes, return just our preset combination
+	if len(nonPresetSnakes) == 0 {
+		return []map[string]rules.SnakeMove{presetMoves}
 	}
-	buildCombinations(0, make(map[string]rules.SnakeMove))
-	return combinations
+
+	nonPresetMoves := lo.Map(nonPresetSnakes, func(snake SnakeSnapshot, _ int) []rules.SnakeMove {
+		return snake.ForwardMoves()
+	})
+
+	moveCombinations := lib.CartesianProduct(nonPresetMoves...)
+
+	// mix in preset moves to each combo and convert to map from snakeID->move
+	mappedCombinations := make([]map[string]rules.SnakeMove, len(moveCombinations))
+	for moveSet := range moveCombinations {
+		combination := lo.Assign(presetMoves)
+		for j, move := range moveSet {
+			combination[nonPresetSnakes[j].ID()] = move
+		}
+		mappedCombinations = append(mappedCombinations, combination)
+	}
+
+	return mappedCombinations
 }
 
-func (sa *SnakeAgent) calculateMarginalScore(heuristic HeuristicFunc, nextStates []GameSnapshot) float64 {
-	var totalScore float64
-	for _, state := range nextStates {
-		totalScore += float64(heuristic(state))
+// for convenient debug printing of move combo collection
+func getMoveComboList(moveCombinations []map[string]rules.SnakeMove) [][]string {
+	var result [][]string
+	for _, combo := range moveCombinations {
+		var moves []string
+		for _, snakeMove := range combo {
+			moves = append(moves, snakeMove.Move)
+		}
+		result = append(result, moves)
 	}
-	expectedScore := totalScore / float64(len(nextStates))
-	// Calculate mean expected score across all moves (assuming 3 non-backward moves)
-	meanExpectedScore := expectedScore / 3
-	return expectedScore - meanExpectedScore
+	return result
 }

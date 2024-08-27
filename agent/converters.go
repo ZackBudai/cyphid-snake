@@ -3,6 +3,7 @@ package agent
 import (
 	"github.com/BattlesnakeOfficial/rules"
 	"github.com/BattlesnakeOfficial/rules/client"
+	"strconv"
 )
 
 func ConvertToBoardState(request client.SnakeRequest) *rules.BoardState {
@@ -82,4 +83,24 @@ func snakeMovesToStrings(snakeMoves []rules.SnakeMove) []string {
 		moveStrings[i] = move.Move
 	}
 	return moveStrings
+}
+
+func ConvertRulesetSettingsToMap(settings client.RulesetSettings) map[string]string {
+		result := make(map[string]string)
+
+		// Convert main settings
+		result[rules.ParamFoodSpawnChance] = strconv.Itoa(settings.FoodSpawnChance)
+		result[rules.ParamMinimumFood] = strconv.Itoa(settings.MinimumFood)
+		result[rules.ParamHazardDamagePerTurn] = strconv.Itoa(settings.HazardDamagePerTurn)
+
+		// Convert RoyaleSettings
+		result[rules.ParamShrinkEveryNTurns] = strconv.Itoa(settings.RoyaleSettings.ShrinkEveryNTurns)
+
+		// Convert SquadSettings
+		result[rules.ParamAllowBodyCollisions] = strconv.FormatBool(settings.SquadSettings.AllowBodyCollisions)
+		result[rules.ParamSharedElimination] = strconv.FormatBool(settings.SquadSettings.SharedElimination)
+		result[rules.ParamSharedHealth] = strconv.FormatBool(settings.SquadSettings.SharedHealth)
+		result[rules.ParamSharedLength] = strconv.FormatBool(settings.SquadSettings.SharedLength)
+
+		return result
 }

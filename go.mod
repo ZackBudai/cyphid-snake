@@ -1,13 +1,13 @@
 module github.com/Battle-Bunker/cyphid-snake
 
-go 1.18
+go 1.21.0
+
+toolchain go1.21.10
 
 require (
-	github.com/BattlesnakeOfficial/rules v1.2.3 // indirect
-	github.com/gorilla/websocket v1.4.2 // indirect
-	github.com/rs/cors v1.8.2 // indirect
-	github.com/samber/lo v1.46.0 // indirect
-	github.com/samber/mo v1.13.0 // indirect
-	github.com/spf13/jwalterweatherman v1.1.0 // indirect
-	golang.org/x/text v0.16.0 // indirect
+	github.com/BattlesnakeOfficial/rules v1.2.3
+	github.com/samber/lo v1.46.0
+	github.com/samber/mo v1.13.0
 )
+
+require golang.org/x/text v0.16.0 // indirect

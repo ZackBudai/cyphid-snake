@@ -3,8 +3,8 @@ package agent
 import (
 	"github.com/BattlesnakeOfficial/rules"
 	"github.com/BattlesnakeOfficial/rules/client"
-	// "github.com/samber/mo"
 	"github.com/samber/lo"
+	"github.com/samber/mo"
 	// "encoding/json"
 	"log"
 )
@@ -99,13 +99,17 @@ func (g *gameSnapshotImpl) Rules() rules.Ruleset {
 }
 
 func (g *gameSnapshotImpl) Teammates() []SnakeSnapshot {
-	return lo.Map(g.allyIDs, func(id string, _ int) SnakeSnapshot {
+	teammateIds := lo.Reject(g.allyIDs, func(id string, _ int) bool {
+		return id == g.yourID
+	})
+
+	return lo.Map(teammateIds, func(id string, _ int) SnakeSnapshot {
 		return g.getSnakeById(id)
 	})
 }
 
 func (g *gameSnapshotImpl) YourTeam() []SnakeSnapshot {
-	return lo.Map(append(g.allyIDs, g.yourID), func(id string, _ int) SnakeSnapshot {
+	return lo.Map(g.allyIDs, func(id string, _ int) SnakeSnapshot {
 		return g.getSnakeById(id)
 	})
 }
@@ -130,6 +134,7 @@ func (g *gameSnapshotImpl) ApplyMoves(moves []rules.SnakeMove) (GameSnapshot, er
 	}
 
 	_, nextBoardState, err := g.ruleset.Execute(g.boardState, moves)
+
 	if err != nil {
 		log.Printf("Error executing moves: %v", err)
 		return nil, err
@@ -144,20 +149,27 @@ func NewGameSnapshot(request *client.SnakeRequest) GameSnapshot {
 	}
 	boardState := ConvertToBoardState(*request)
 
-	builder := rules.NewRulesetBuilder()
-	ruleset := builder.NamedRuleset(request.Game.Ruleset.Name)
+	rulesetName := request.Game.Ruleset.Name
+	// log.Println("Creating game snapshot for ruleset:", rulesetName)
+	
+	
+	ruleset := rules.NewRulesetBuilder().
+		WithParams(ConvertRulesetSettingsToMap(request.Game.Ruleset.Settings)).
+		WithSolo(len(request.Board.Snakes) < 2).
+		NamedRuleset(rulesetName)
 
 	if ruleset == nil {
-		panic("Failed to create ruleset for request: " + request.Game.Ruleset.Name)
+		panic("Failed to create ruleset for request: " + rulesetName)
 	}
 
-	
 	snakeStats := make(map[string]*snakeStatsImpl)
 	for _, snake := range request.Board.Snakes {
+		turnLastShouted := mo.TupleToOption(request.Turn, snake.Shout != "").OrElse(0)
+
 		snakeStats[snake.ID] = &snakeStatsImpl{
-			name:							snake.Name,
-			lastShout:        snake.Shout,
-			turnLastShouted:  request.Turn,
+			name:            snake.Name,
+			lastShout:       snake.Shout,
+			turnLastShouted: turnLastShouted,
 		}
 	}
 	color := request.You.Customizations.Color
@@ -169,14 +181,14 @@ func NewGameSnapshot(request *client.SnakeRequest) GameSnapshot {
 	opponentIDs := lo.FilterMap(request.Board.Snakes, func(snake client.Snake, _ int) (string, bool) {
 		return snake.ID, snake.Customizations.Color != color
 	})
-	
+
 	return &gameSnapshotImpl{
 		gameID:      request.Game.ID,
 		ruleset:     ruleset,
 		boardState:  boardState,
 		snakeStats:  snakeStats,
 		yourID:      request.You.ID,
-		allyIDs: 		 allyIDs,
+		allyIDs:     allyIDs,
 		opponentIDs: opponentIDs,
 	}
 }
@@ -186,12 +198,12 @@ func (g *gameSnapshotImpl) UpdateGameSnapshotBoardState(newBoardState *rules.Boa
 		panic("UpdateGameSnapshotBoardState: newBoardState is nil")
 	}
 	return &gameSnapshotImpl{
-		gameID:     g.gameID,
-		boardState: newBoardState,
-		ruleset:    g.ruleset,
+		gameID:      g.gameID,
+		boardState:  newBoardState,
+		ruleset:     g.ruleset,
 		snakeStats:  g.snakeStats,
-		yourID:     g.yourID,
-		allyIDs: 		 g.allyIDs,
+		yourID:      g.yourID,
+		allyIDs:     g.allyIDs,
 		opponentIDs: g.opponentIDs,
 	}
 }
