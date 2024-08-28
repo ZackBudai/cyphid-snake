@@ -17,14 +17,24 @@ import (
 
 // Update the SnakeAgent structure to include SnakeMetadataResponse
 type SnakeAgent struct {
-	Portfolio HeuristicPortfolio
-	Metadata  client.SnakeMetadataResponse
+	Portfolio   HeuristicPortfolio
+	Temperature float64
+	Metadata    client.SnakeMetadataResponse
+}
+
+func NewSnakeAgentWithTemp(portfolio HeuristicPortfolio, temperature float64, metadata client.SnakeMetadataResponse) *SnakeAgent {
+	return &SnakeAgent{
+		Portfolio:   portfolio,
+		Temperature: temperature,
+		Metadata:    metadata,
+	}
 }
 
 func NewSnakeAgent(portfolio HeuristicPortfolio, metadata client.SnakeMetadataResponse) *SnakeAgent {
 	return &SnakeAgent{
-		Portfolio: portfolio,
-		Metadata:  metadata,
+		Portfolio:   portfolio,
+		Temperature: 5.0,
+		Metadata:    metadata,
 	}
 }
 
@@ -46,7 +56,7 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 	heuristicScores := lo.Map(sa.Portfolio, func(heuristic WeightedHeuristic, _ int) map[string]float64 {
 		return sa.weightedScoresForHeuristic(heuristic, nextStatesMap, forwardMoveStrs)
 	})
-	
+
 	totalHeuristicWeight := lo.SumBy(sa.Portfolio, func(heuristic WeightedHeuristic) float64 {
 		return heuristic.Weight()
 	})
@@ -58,7 +68,7 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 		})
 	})
 
-	probs := lib.SoftmaxWithTemp(normalizedScores, 10.0)
+	probs := lib.SoftmaxWithTemp(normalizedScores, sa.Temperature)
 
 	log.Printf("### %36s: %s", "Aggregate move weights", strings.Join(lo.Map(forwardMoveStrs, func(move string, i int) string {
 		return fmt.Sprintf("%s=%6.1f", move, normalizedScores[i])
@@ -88,7 +98,7 @@ func (sa *SnakeAgent) weightedScoresForHeuristic(heuristic WeightedHeuristic, ne
 	weightedScores := lo.MapValues(moveScores, func(score float64, _ string) float64 {
 		return score * heuristic.Weight()
 	})
-	
+
 	return weightedScores
 }
 

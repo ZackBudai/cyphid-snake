@@ -20,7 +20,7 @@ func main() {
 		agent.NewHeuristic(1.0, "team-health", HeuristicHealth),
 	)
 
-	snakeAgent := agent.NewSnakeAgent(portfolio, metadata)
+	snakeAgent := agent.NewSnakeAgentWithTemp(portfolio, 5.0, metadata)
 	server := server.NewServer(snakeAgent)
 
 	server.Start()
