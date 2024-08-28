@@ -60,11 +60,11 @@ func (sa *SnakeAgent) ChooseMove(snapshot GameSnapshot) client.MoveResponse {
 
 	probs := lib.SoftmaxWithTemp(normalizedScores, 10.0)
 
-	log.Printf("###       Aggregate move weights: %s", strings.Join(lo.Map(forwardMoveStrs, func(move string, i int) string {
-		return fmt.Sprintf("%s=%5.1f", move, normalizedScores[i])
+	log.Printf("### %36s: %s", "Aggregate move weights", strings.Join(lo.Map(forwardMoveStrs, func(move string, i int) string {
+		return fmt.Sprintf("%s=%6.1f", move, normalizedScores[i])
 	}), ", "))
-	log.Printf("### Aggregate move probabilities: %s", strings.Join(lo.Map(forwardMoveStrs, func(move string, i int) string {
-		return fmt.Sprintf("%s=%4.1f%%", move, probs[i]*100)
+	log.Printf("### %36s: %s", "Aggregate move probabilities", strings.Join(lo.Map(forwardMoveStrs, func(move string, i int) string {
+		return fmt.Sprintf("%s=%5.1f%%", move, probs[i]*100)
 	}), ", "))
 
 	chosenMove := forwardMoveStrs[lib.SampleFromWeights(probs)]
@@ -81,8 +81,8 @@ func (sa *SnakeAgent) weightedScoresForHeuristic(heuristic WeightedHeuristic, ne
 		moveScores[move] = lo.MeanBy(states, heuristic.F())
 	}
 
-	log.Printf("%22s for %25s: %s", "MoveScores", heuristic.NameAndWeight(), strings.Join(lo.Map(forwardMoveStrs, func(move string, _ int) string {
-		return fmt.Sprintf("%s=%5.1f", move, moveScores[move])
+	log.Printf("MoveScores for %25s: %s", heuristic.NameAndWeight(), strings.Join(lo.Map(forwardMoveStrs, func(move string, _ int) string {
+		return fmt.Sprintf("%s=%6.1f", move, moveScores[move])
 	}), ", "))
 
 	weightedScores := lo.MapValues(moveScores, func(score float64, _ string) float64 {
