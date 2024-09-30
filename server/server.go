@@ -34,7 +34,7 @@ func withServerID(next http.HandlerFunc) http.HandlerFunc {
 func (s *Server) Start() {
 	port := os.Getenv("PORT")
 	if len(port) == 0 {
-		port = "8000"
+		port = "8002"
 	}
 
 	http.HandleFunc("/", withServerID(s.handleIndex))
