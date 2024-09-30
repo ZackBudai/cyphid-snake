@@ -1,4 +1,4 @@
-module github.com/ZackBudai/cyphid-snake
+module github.com/Battle-Bunker/cyphid-snake
 
 go 1.21.0
 
